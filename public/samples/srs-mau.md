@@ -33,16 +33,23 @@ Tài liệu mô tả các yêu cầu chức năng và phi chức năng của h�
 ### 2.1 Kiến trúc hệ thống
 
 ```mermaid
-%% caption: Kiến trúc tổng quan các thành phần
-flowchart LR
-    U[Nhân viên / Quản lý] -->|HTTPS| W[Web App]
-    W --> G[API Gateway]
-    G --> A[Dịch vụ Đơn phép]
-    G --> N[Dịch vụ Thông báo]
-    A --> D[(CSDL PostgreSQL)]
-    A -->|Sự kiện| Q[[Hàng đợi]]
-    Q --> N
-    N --> M[Email / Chat nội bộ]
+%% caption: Luồng xử lý qua các thành phần hệ thống
+sequenceDiagram
+    autonumber
+    actor U as Người dùng
+    participant W as Web App
+    participant G as API Gateway
+    participant A as Đơn phép
+    participant N as Thông báo
+    U->>W: Thao tác
+    W->>G: Gọi API (HTTPS)
+    G->>A: Chuyển tiếp
+    Note over A: Đọc / ghi PostgreSQL
+    A-->>G: Kết quả
+    G-->>W: Phản hồi
+    W-->>U: Hiển thị
+    A-)N: Sự kiện (queue)
+    N-)U: Email / chat nội bộ
 ```
 
 ### 2.2 Tác nhân
@@ -70,23 +77,23 @@ sequenceDiagram
     autonumber
     actor NV as Nhân viên
     participant W as Web App
-    participant A as Dịch vụ Đơn phép
+    participant A as Đơn phép
     participant N as Thông báo
     actor QL as Quản lý
     NV->>W: Nhập thông tin đơn
     W->>A: POST /don-phep
-    A->>A: Kiểm tra quỹ phép, ngày trùng
+    Note over W,A: Kiểm tra quỹ phép, ngày trùng
     alt Hợp lệ
         A-->>W: 201 Đã tạo
-        A->>N: Sự kiện DON_MOI
-        N->>QL: Thông báo có đơn cần duyệt
-    else Không hợp lệ
+        A-)N: Đơn mới
+        N-)QL: Có đơn cần duyệt
+    else Lỗi
         A-->>W: 422 Lý do lỗi
     end
     QL->>W: Duyệt / Từ chối
-    W->>A: PATCH /don-phep/{id}
-    A->>N: Sự kiện DON_DA_XU_LY
-    N->>NV: Thông báo kết quả
+    W->>A: PATCH /don-phep
+    A-)N: Đơn đã xử lý
+    N-)NV: Thông báo kết quả
 ```
 
 ### 3.2 Vòng đời đơn

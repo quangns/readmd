@@ -75,8 +75,12 @@ const MERMAID_BASE = {
   htmlLabels: false, // nhãn bằng <text> thuần SVG: in PDF, xuất PNG/SVG đều chuẩn
   // Thu gọn khoảng cách để sơ đồ vừa bề rộng trang A4 (~170mm) mà chữ không bị co quá nhỏ
   flowchart: { htmlLabels: false, curve: 'basis', padding: 12, nodeSpacing: 32, rankSpacing: 40 },
+  // Sequence: cột hẹp + tự xuống dòng nhãn dài để sơ đồ vừa khổ trang mà chữ vẫn ≥ 12px
   sequence: {
-    useMaxWidth: true, mirrorActors: false, actorMargin: 36, width: 130, boxMargin: 8, messageMargin: 32,
+    useMaxWidth: true, mirrorActors: false, wrap: true, wrapPadding: 8,
+    width: 118, height: 44, actorMargin: 30, boxMargin: 8, boxTextMargin: 4,
+    noteMargin: 8, messageMargin: 30, diagramMarginX: 8, diagramMarginY: 8,
+    actorFontSize: 13, messageFontSize: 13, noteFontSize: 12,
     messageFontFamily: FONT, actorFontFamily: FONT, noteFontFamily: FONT,
   },
   er: { useMaxWidth: true },
