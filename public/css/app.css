@@ -238,6 +238,8 @@ select {
 .check { display: flex; align-items: center; gap: 0.55rem; font-size: 0.875rem; min-height: 30px; cursor: pointer; }
 .check input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
 .panel .btn--text { margin-top: 0.4rem; }
+.panel__hint { margin: 0.35rem 0 0; font-size: 0.75rem; line-height: 1.5; color: var(--ink-2); }
+.panel__hint code { font-size: 0.72rem; }
 
 /* Vùng làm việc */
 .workspace { min-width: 0; padding: 0 2rem 4rem; }

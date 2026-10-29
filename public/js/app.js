@@ -1,6 +1,6 @@
 // convertSRS — đọc Markdown, xem trực tiếp hoặc xuất PDF / TXT.
 // Thư viện marked, DOMPurify, hljs, mermaid được nạp dạng global từ /vendor.
-import { diagramInfo, toText, slugger, splitFrontmatter } from './srs-core.js';
+import { diagramInfo, toText, slugger, splitFrontmatter, flowchartToSequence } from './srs-core.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -199,11 +199,13 @@ function createRenderer(slug, headings, diagrams) {
     const language = (lang || '').trim().split(/\s+/)[0].toLowerCase();
     if (language === 'mermaid') {
       const info = diagramInfo(text);
-      const no = diagrams.push({ src: text, ...info });
-      const caption = escapeHtml(info.caption || info.typeLabel);
+      const isFlow = info.type === 'flowchart' || info.type === 'graph';
+      const seqSrc = isFlow ? flowchartToSequence(text) : null;
+      const d = { src: text, seqSrc, view: seqSrc && flowToSeqEnabled() ? 'sequence' : 'original', ...info };
+      const no = diagrams.push(d);
       return `<figure class="diagram" id="hinh-${no}" data-diagram="${no - 1}">
         <div class="diagram__frame"><div class="sk sk--block"></div></div>
-        <figcaption><span class="fig-no">Hình ${no}</span> — ${caption}</figcaption>
+        <figcaption>${captionHtml(no, d)}</figcaption>
       </figure>\n`;
     }
     let body;
@@ -218,6 +220,20 @@ function createRenderer(slug, headings, diagrams) {
   };
 
   return renderer;
+}
+
+// ---------- Flowchart -> sequence ----------
+const FLOW2SEQ_KEY = 'convertsrs-flow2seq';
+function flowToSeqEnabled() {
+  return localStorage.getItem(FLOW2SEQ_KEY) !== '0';
+}
+const diagramSrc = (d) => (d.view === 'sequence' && d.seqSrc ? d.seqSrc : d.src);
+function diagramLabel(d) {
+  if (d.caption) return d.caption;
+  return d.view === 'sequence' && d.seqSrc ? 'Sơ đồ tuần tự' : d.typeLabel;
+}
+function captionHtml(no, d) {
+  return `<span class="fig-no">Hình ${no}</span> — ${escapeHtml(diagramLabel(d))}`;
 }
 
 function escapeHtml(s) {
@@ -258,11 +274,12 @@ async function render() {
   let errors = 0;
   for (const fig of $$('.diagram', el.docBody)) {
     if (seq !== state.renderSeq) return;
-    const d = diagrams[Number(fig.dataset.diagram)];
+    const index = Number(fig.dataset.diagram);
+    const d = diagrams[index];
     try {
-      const svg = await renderMermaid(d.src, theme);
+      const svg = await renderDiagramSvg(d, theme);
       if (seq !== state.renderSeq) return;
-      if (theme === 'light') lightSvgCache.set(Number(fig.dataset.diagram), svg);
+      if (theme === 'light') lightSvgCache.set(cacheKey(index), svg);
       paintDiagram(fig, d, svg);
     } catch (err) {
       if (seq !== state.renderSeq) return;
@@ -276,18 +293,32 @@ async function render() {
   setStatus(`${headings.length} mục · ${diagrams.length} sơ đồ${errors ? ` · ${errors} sơ đồ lỗi` : ''}`, errors > 0);
 }
 
+// Vẽ theo chế độ xem; nếu bản chuyển sang sequence lỗi thì bỏ chuyển đổi, vẽ bản gốc
+async function renderDiagramSvg(d, theme) {
+  try {
+    return await renderMermaid(diagramSrc(d), theme);
+  } catch (err) {
+    if (diagramSrc(d) === d.src) throw err;
+    console.warn('Không vẽ được bản sequence, dùng sơ đồ gốc:', err);
+    d.seqSrc = null;
+    d.view = 'original';
+    return renderMermaid(d.src, theme);
+  }
+}
+
 function prepareSvg(svgEl, fig, d) {
   svgEl.removeAttribute('height');
   // Không phóng to sơ đồ nhỏ quá kích thước gốc
   const vbw = svgEl.viewBox.baseVal?.width;
   if (vbw) svgEl.style.maxWidth = `${Math.ceil(vbw)}px`;
   svgEl.setAttribute('role', 'img');
-  svgEl.setAttribute('aria-label', `Hình ${Number(fig.dataset.diagram) + 1}: ${d.caption || d.typeLabel}`);
+  svgEl.setAttribute('aria-label', `Hình ${Number(fig.dataset.diagram) + 1}: ${diagramLabel(d)}`);
   return svgEl;
 }
 
 function paintDiagram(fig, d, svg) {
   const frame = $('.diagram__frame', fig);
+  $('figcaption', fig).innerHTML = captionHtml(Number(fig.dataset.diagram) + 1, d);
   frame.innerHTML = svg;
   prepareSvg($('svg', frame), fig, d);
   frame.append(diagramTools(fig, d));
@@ -295,9 +326,14 @@ function paintDiagram(fig, d, svg) {
 
 // Bản sáng của sơ đồ dùng cho PDF / in / tải SVG, PNG — tài liệu xuất ra luôn nền sáng
 const lightSvgCache = new Map();
+const cacheKey = (index) => `${index}:${state.diagrams[index].view}`;
 async function lightSvg(index) {
-  if (!lightSvgCache.has(index)) lightSvgCache.set(index, await renderMermaid(state.diagrams[index].src, 'light'));
-  return lightSvgCache.get(index);
+  const d = state.diagrams[index];
+  if (!lightSvgCache.has(cacheKey(index))) {
+    const svg = await renderDiagramSvg(d, 'light');
+    lightSvgCache.set(cacheKey(index), svg);
+  }
+  return lightSvgCache.get(cacheKey(index));
 }
 async function lightSvgElement(fig) {
   const index = Number(fig.dataset.diagram);
@@ -307,19 +343,29 @@ async function lightSvgElement(fig) {
 }
 
 // Đổi theme: vẽ lại sơ đồ tại chỗ (không dựng lại cả tài liệu để giữ vị trí cuộn)
-async function repaintDiagrams() {
+async function repaintDiagrams(figs = $$('.diagram:not(.diagram--error)', el.docBody)) {
   if (!state.diagrams?.length) return;
   const seq = state.renderSeq;
   const theme = effectiveTheme();
-  for (const fig of $$('.diagram:not(.diagram--error)', el.docBody)) {
+  for (const fig of figs) {
     if (seq !== state.renderSeq) return;
     const index = Number(fig.dataset.diagram);
     try {
-      const svg = theme === 'light' ? await lightSvg(index) : await renderMermaid(state.diagrams[index].src, theme);
+      const svg = theme === 'light' ? await lightSvg(index) : await renderDiagramSvg(state.diagrams[index], theme);
       if (seq !== state.renderSeq) return;
       paintDiagram(fig, state.diagrams[index], svg);
     } catch { /* sơ đồ đã vẽ được ở lượt đầu, bỏ qua */ }
   }
+}
+
+// Đổi giữa dạng sequence và dạng gốc (một hình hoặc toàn bộ)
+async function setDiagramView(figs, view) {
+  for (const fig of figs) {
+    const d = state.diagrams[Number(fig.dataset.diagram)];
+    if (d?.seqSrc) d.view = view;
+  }
+  buildToc(state.headings, state.diagrams);
+  await repaintDiagrams(figs);
 }
 
 function cleanMermaidError(err) {
@@ -339,8 +385,14 @@ function diagramTools(fig, d) {
     b.addEventListener('click', fn);
     return b;
   };
+  if (d.seqSrc) {
+    const toSeq = d.view !== 'sequence';
+    const b = mk(toSeq ? 'Dạng sequence' : 'Dạng gốc', () => setDiagramView([fig], toSeq ? 'sequence' : 'original'));
+    b.title = toSeq ? 'Hiển thị flowchart này dưới dạng sequence diagram' : 'Xem lại flowchart gốc';
+    box.append(b);
+  }
   box.append(
-    mk('Phóng to', () => openViewer(fig, `Hình ${no} — ${d.caption || d.typeLabel}`)),
+    mk('Phóng to', () => openViewer(fig, `Hình ${no} — ${diagramLabel(d)}`)),
     mk('SVG', async () => downloadBlob(new Blob([await svgString(fig)], { type: 'image/svg+xml' }), `${name}.svg`)),
     mk('PNG', () => exportPng(fig, `${name}.png`)),
   );
@@ -406,7 +458,7 @@ function buildToc(headings, diagrams) {
     t.className = 'panel__title toc__sub';
     t.textContent = 'Danh mục hình';
     frag.append(t);
-    diagrams.forEach((d, n) => link(`#hinh-${n + 1}`, `Hình ${n + 1} · ${d.caption || d.typeLabel}`, 'is-fig'));
+    diagrams.forEach((d, n) => link(`#hinh-${n + 1}`, `Hình ${n + 1} · ${diagramLabel(d)}`, 'is-fig'));
   }
   el.toc.replaceChildren(frag);
 
@@ -643,6 +695,13 @@ el.btnPdf.addEventListener('click', async () => {
 });
 
 el.btnPrint.addEventListener('click', printFallback);
+
+const optFlowSeq = $('#optFlowSeq');
+optFlowSeq.checked = flowToSeqEnabled();
+optFlowSeq.addEventListener('change', () => {
+  localStorage.setItem(FLOW2SEQ_KEY, optFlowSeq.checked ? '1' : '0');
+  setDiagramView($$('.diagram:not(.diagram--error)', el.docBody), optFlowSeq.checked ? 'sequence' : 'original');
+});
 async function printFallback() {
   activateTab('preview');
   // Bản in luôn nền sáng: ép tạm theme sáng, in xong trả lại theme đang dùng
