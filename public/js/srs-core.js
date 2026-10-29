@@ -354,6 +354,10 @@ const SUBJECTS = [
 ].sort((a, b) => b.length - a.length);
 const DEFAULT_LANE = 'Hệ thống';
 const TERMINAL_RE = /^(?:bắt đầu|kết thúc|start|end|begin|stop|hoàn thành|hoàn tất|finish|done)$/i;
+const YES_RE = /^(?:có|yes|y|đúng|true|ok|hợp lệ|thành công|success|pass|đạt|đồng ý|duyệt)$/i;
+const NO_RE = /^(?:không|no|n|sai|false|thất bại|fail|failed|từ chối|lỗi|error|không hợp lệ|invalid)$/i;
+// Câu hỏi mang nghĩa lỗi / vượt ngưỡng ("Sai quá 3 lần?", "Có lỗi?"): nhánh Không mới là luồng bình thường
+const NEGATIVE_Q_RE = /(lỗi|sai|thất bại|hết hạn|quá|vượt|khoá|khóa|bị |trùng|error|fail|invalid|expired|exceed|timeout|locked)/i;
 const DECISION_SHAPES = new Set(['{', 'diamond', 'decision', 'diam', 'rhombus', 'question']);
 const capFirst = (t) => (t ? t[0].toLocaleUpperCase('vi') + t.slice(1) : t);
 
@@ -412,7 +416,8 @@ function processSequence({ nodes, edges, boxes, front }) {
   const pid = (key) => 'L' + lanes.get(key).order;
 
   function emitStep(n, fromKey, indent, edgeLabel) {
-    const { lane, action } = info(n);
+    const { lane, action: act } = info(n);
+    const action = isDecision(n) && !/^kiểm tra/i.test(act) ? `Kiểm tra: ${act}` : act;
     const to = useLane(lane);
     const from = fromKey || to;
     const text = action + (edgeLabel ? ` (${edgeLabel})` : '');
@@ -427,9 +432,9 @@ function processSequence({ nodes, edges, boxes, front }) {
   function backRef(id, laneK, indent) {
     const n = nodes.get(id);
     let text;
+    if (isTerminal(n)) return; // nhiều nhánh cùng về "Kết thúc": không cần ghi chú
     if (stepOf.has(id)) text = `Quay lại bước ${stepOf.get(id)} — ${info(n).action}`;
     else if (isDecision(n)) text = `Quay lại kiểm tra: ${n.label}`;
-    else if (isTerminal(n)) text = n.label;
     else text = `Quay lại: ${n.label}`;
     note(laneK, indent, text);
   }
@@ -454,56 +459,86 @@ function processSequence({ nodes, edges, boxes, front }) {
     return lists[0].find((id) => sets.every((st) => st.has(id))) || null;
   }
 
+  let reachedEnd = false; // nhánh vừa duyệt có đi tới node Kết thúc không
   function walk(start, fromKey, indent, stopAt, edgeLabel = '') {
     let cur = start;
     let lane = fromKey;
     let label = edgeLabel;
     while (cur && cur !== stopAt) {
       const n = nodes.get(cur);
-      if (visited.has(cur)) { backRef(cur, lane, indent); return lane; }
+      if (visited.has(cur)) {
+        if (isTerminal(n)) reachedEnd = true;
+        backRef(cur, lane, indent);
+        return lane;
+      }
       visited.add(cur);
       const o = outs(cur);
 
       if (o.length > 1) {
         const dec = isDecision(n);
         if (!dec && !isTerminal(n)) lane = emitStep(n, lane, indent, label);
-        // Điều kiện thuộc một làn cụ thể (subgraph / chủ ngữ): chuyển sang làn đó để xét,
-        // các nhánh xuất phát từ làn này
-        const decStep = dec && (n.box >= 0 || matchSubject(n.label));
-        if (decStep) lane = emitStep(n, lane, indent, label);
-        const join = findJoin(o.map((e) => e.to), stopAt);
-        let main = null;
-        let side = o;
-        if (!join && dec) {
-          // Không gộp lại: nhánh đi xa nhất là luồng chính, các nhánh còn lại là ngoại lệ
-          const sizes = o.map((e) => reach(e.to, stopAt).length);
-          const max = Math.max(...sizes);
-          if (sizes.filter((x) => x === max).length === 1) {
-            const k = sizes.indexOf(max);
+        // Hình thoi luôn là một bước "Kiểm tra: …" có đánh số, ở làn thực hiện việc kiểm tra
+        // (subgraph / chủ ngữ, mặc định Hệ thống); các nhánh xuất phát từ làn này
+        if (dec) lane = emitStep(n, lane, indent, label);
+        let join = findJoin(o.map((e) => e.to), stopAt);
+        // Gộp nhau ở "Kết thúc" không phải gộp thật: nhánh tới thẳng kết thúc là nhánh dừng riêng
+        if (join && isTerminal(nodes.get(join))) join = null;
+
+        if (dec) {
+          // Hình thoi: luồng chính đi tiếp ở ngoài, các nhánh còn lại vẽ thành đường riêng (opt/alt)
+          let main = null;
+          let side;
+          if (join) {
+            side = o.filter((e) => e.to !== join); // nhánh đi thẳng tới điểm gộp không có bước nào
+          } else {
+            // Luồng chính theo nghĩa câu hỏi: câu khẳng định ("Hợp lệ?") -> nhánh Có/Yes đi tiếp,
+            // câu mang nghĩa lỗi ("Sai quá 3 lần?") -> nhánh Không/No đi tiếp.
+            // Nhãn nhánh không phải Có/Không thì lấy nhánh đi xa nhất.
+            const wantRe = NEGATIVE_Q_RE.test(n.label) ? NO_RE : YES_RE;
+            let k = o.findIndex((e) => wantRe.test(e.label.trim()));
+            if (k < 0) {
+              const sizes = o.map((e) => reach(e.to, stopAt).length);
+              k = 0;
+              for (let j = 1; j < o.length; j++) if (sizes[j] > sizes[k]) k = j;
+            }
             main = o[k];
             side = o.filter((_, j) => j !== k);
           }
+          if (!side.length) side = o;
+          const cond = n.label;
+          side.forEach((e, k) => {
+            // Câu hỏi đã nằm ở bước "Kiểm tra: …" ngay trên khối -> tiêu đề khối chỉ cần nhãn nhánh
+            const head = e.label || (k === 0 ? cond : '');
+            body.push({ indent, raw: `${k === 0 ? (side.length === 1 ? 'opt' : 'alt') : 'else'} ${head}`.trimEnd() });
+            const before = body.length;
+            reachedEnd = false;
+            const endLane = walk(e.to, lane, indent + '    ', join || stopAt);
+            if (reachedEnd) note(endLane || lane, indent + '    ', 'Kết thúc luồng');
+            else if (body.length === before) note(lane, indent + '    ', 'Bỏ qua');
+          });
+          body.push({ indent, raw: 'end' });
+          reachedEnd = false; // chỉ tính phần đi tiếp sau khối, không tính nhánh con bên trong
+          cur = main ? main.to : join;
+          label = '';
+          continue;
         }
-        const cond = dec && !decStep ? n.label : ''; // điều kiện đã là một bước thì tiêu đề nhánh chỉ cần nhãn nhánh
-        const kw = dec ? (main && side.length === 1 ? 'opt' : 'alt') : 'par';
-        side.forEach((e, k) => {
-          const head = dec
-            ? (e.label ? (k === 0 && cond ? `${cond} — ${e.label}` : e.label) : (k === 0 ? cond : ''))
-            : (e.label || 'Song song');
-          body.push({ indent, raw: `${k === 0 ? kw : dec ? 'else' : 'and'} ${head}`.trimEnd() });
+
+        // Rẽ nhánh song song (không phải điều kiện): mọi nhánh trong khối par
+        o.forEach((e, k) => {
+          body.push({ indent, raw: `${k === 0 ? 'par' : 'and'} ${e.label || 'Song song'}` });
           const before = body.length;
           walk(e.to, lane, indent + '    ', join || stopAt);
-          if (body.length === before) note(lane, indent + '    ', 'Bỏ qua');
+          if (body.length === before) note(lane, indent + '    ', isTerminal(nodes.get(e.to)) ? 'Kết thúc luồng' : 'Bỏ qua');
         });
         body.push({ indent, raw: 'end' });
-        if (main) { cur = main.to; label = dec ? '' : main.label; continue; }
+        reachedEnd = false;
         cur = join;
         label = '';
         continue;
       }
 
       if (!isTerminal(n)) lane = emitStep(n, lane, indent, label);
-      if (!o.length) return lane;
+      if (!o.length) { if (isTerminal(n)) reachedEnd = true; return lane; }
       label = o[0].label;
       cur = o[0].to;
     }
