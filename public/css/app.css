@@ -122,6 +122,12 @@ code, pre, textarea, .raw-lines, .txt-preview { font-variant-ligatures: none; fo
 .panel { padding: 1.1rem 1.5rem 1.25rem; border-top: 1px solid var(--line); }
 .panel:first-child { border-top: 0; }
 .panel--grow { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.panel--compact { padding-top: 0.6rem; padding-bottom: 0.7rem; }
+.panel__head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+.panel__head .panel__title { margin-bottom: 0.75rem; }
+.btn--xs { min-height: 24px; font-size: 0.75rem; }
+.source-quick { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.panel--source:has(.source-body[hidden]) { padding-bottom: 0.9rem; }
 .panel__title {
   margin: 0 0 0.75rem;
   font-size: 0.75rem; font-weight: 600;
@@ -487,7 +493,7 @@ html[data-theme='dark'] .hljs-deletion { color: #FFDCD7; background-color: #6706
   /* Mobile: tài liệu lên trước, sidebar (nguồn, mục lục, tuỳ chọn) xuống dưới */
   .sidebar { position: static; height: auto; border-right: 0; border-top: 1px solid var(--line); order: 2; }
   .workspace { order: 1; }
-  .panel--grow { max-height: 260px; }
+  .panel--grow { max-height: 55dvh; }
   .workspace { padding: 0 1rem 3rem; }
   .tabs { margin: 0 -1rem 1.25rem; padding: 0 1rem; gap: 1rem; }
   .paper { padding: 2rem 1.75rem; }

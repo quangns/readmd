@@ -469,10 +469,39 @@ function buildToc(headings, diagrams) {
     for (const e of entries) {
       if (!e.isIntersecting) continue;
       $$('a.is-current', el.toc).forEach((a) => a.classList.remove('is-current'));
-      el.toc.querySelector(`a[href="#${CSS.escape(e.target.id)}"]`)?.classList.add('is-current');
+      const a = el.toc.querySelector(`a[href="#${CSS.escape(e.target.id)}"]`);
+      if (!a) continue;
+      a.classList.add('is-current');
+      keepTocItemVisible(a);
     }
   }, { rootMargin: '-80px 0px -70% 0px' });
   $$('h1[id], h2[id], h3[id]', el.docBody).forEach((h) => tocObserver.observe(h));
+}
+
+// Cuộn tới cuối trang: tiêu đề cuối không lên được đỉnh màn hình -> đánh dấu mục cuối
+window.addEventListener('scroll', () => {
+  if (el.doc.hidden || innerHeight + scrollY < document.documentElement.scrollHeight - 4) return;
+  const links = $$('a[href^="#"]:not(.is-fig)', el.toc);
+  const last = links[links.length - 1];
+  if (!last || last.classList.contains('is-current')) return;
+  $$('a.is-current', el.toc).forEach((a) => a.classList.remove('is-current'));
+  last.classList.add('is-current');
+  keepTocItemVisible(last);
+}, { passive: true });
+
+// Giữ mục đang đọc trong vùng nhìn thấy của mục lục (chỉ cuộn khung mục lục, không cuộn trang);
+// tạm dừng khi người dùng đang rê chuột / cuộn trong mục lục để không giật
+let tocHover = false;
+el.toc.addEventListener('pointerenter', () => { tocHover = true; });
+el.toc.addEventListener('pointerleave', () => { tocHover = false; });
+function keepTocItemVisible(a) {
+  if (tocHover) return;
+  const box = el.toc.getBoundingClientRect();
+  const r = a.getBoundingClientRect();
+  const margin = box.height * 0.25;
+  if (r.top < box.top + margin || r.bottom > box.bottom - margin) {
+    el.toc.scrollTo({ top: el.toc.scrollTop + (r.top - box.top) - box.height / 3, behavior: 'smooth' });
+  }
 }
 
 el.toc.addEventListener('click', (e) => {
@@ -528,6 +557,7 @@ function loadMarkdown(text, { name = '', source = 'file', size } = {}) {
   const bytes = size ?? new Blob([state.markdown]).size;
   el.fileMeta.textContent = `${formatBytes(bytes)} · ${state.markdown.split('\n').length} dòng`;
   for (const b of [el.btnPdf, el.btnTxt, el.btnPrint, el.btnPdfMenu, el.btnMd, el.btnCopyRaw]) b.disabled = false;
+  setSourceExpanded(false);
 
   return render();
 }
@@ -599,6 +629,21 @@ function loadPasted(text) {
   if (!text.trim()) return toast('Nội dung trống.', true);
   loadMarkdown(text, { source: 'paste' }).then(() => activateTab('preview'));
 }
+
+// Khối "Nguồn tài liệu": đầy đủ khi chưa có tài liệu, thu gọn còn hàng nút nhanh khi đã mở
+// để nhường chiều cao cho mục lục
+const sourceEls = { body: $('#sourceBody'), quick: $('#sourceQuick'), toggle: $('#btnSourceToggle') };
+function setSourceExpanded(expanded) {
+  const hasDoc = !!state.markdown;
+  sourceEls.body.hidden = hasDoc && !expanded;
+  sourceEls.quick.hidden = !hasDoc || expanded;
+  sourceEls.toggle.hidden = !hasDoc;
+  sourceEls.toggle.textContent = expanded ? 'Thu gọn' : 'Mở rộng';
+  sourceEls.toggle.setAttribute('aria-expanded', String(expanded));
+}
+sourceEls.toggle.addEventListener('click', () => setSourceExpanded(sourceEls.body.hidden));
+$('#btnQuickOpen').addEventListener('click', () => el.fileInput.click());
+$('#btnQuickPaste').addEventListener('click', () => { setSourceExpanded(true); setSource('paste'); });
 
 // Dán văn bản
 function setSource(kind) {

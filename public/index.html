@@ -71,8 +71,16 @@
 
   <div class="layout">
     <aside class="sidebar" id="sidebar">
-      <section class="panel">
-        <h2 class="panel__title">Nguồn tài liệu</h2>
+      <section class="panel panel--source" id="sourcePanel">
+        <div class="panel__head">
+          <h2 class="panel__title">Nguồn tài liệu</h2>
+          <button class="btn btn--text btn--xs" id="btnSourceToggle" aria-expanded="true" aria-controls="sourceBody" hidden>Thu gọn</button>
+        </div>
+        <div class="source-quick" id="sourceQuick" hidden>
+          <button class="btn btn--ghost btn--sm" id="btnQuickOpen">Mở file khác</button>
+          <button class="btn btn--ghost btn--sm" id="btnQuickPaste">Dán văn bản</button>
+        </div>
+        <div class="source-body" id="sourceBody">
         <div class="segmented" role="radiogroup" aria-label="Cách nhập tài liệu">
           <button class="segmented__item is-active" role="radio" aria-checked="true" data-source="file">Import file</button>
           <button class="segmented__item" role="radio" aria-checked="false" data-source="paste">Dán văn bản</button>
@@ -92,6 +100,7 @@
           </div>
         </div>
         <button class="btn btn--text" id="btnSample">Mở tài liệu SRS mẫu</button>
+        </div>
       </section>
 
       <section class="panel panel--grow">
@@ -99,10 +108,10 @@
         <nav class="toc" id="toc"><p class="muted">Chưa có tài liệu.</p></nav>
       </section>
 
-      <section class="panel">
-        <h2 class="panel__title">Hiển thị sơ đồ</h2>
-        <label class="check"><input type="checkbox" id="optFlowSeq" checked> Chuyển flowchart sang sequence</label>
-        <p class="panel__hint">Áp dụng cho xem, PDF và ảnh. Thêm dòng <code>%% giữ nguyên</code> vào sơ đồ để không chuyển.</p>
+      <section class="panel panel--compact">
+        <label class="check" title="Áp dụng cho xem, PDF và ảnh. Thêm dòng “%% giữ nguyên” vào sơ đồ để không chuyển.">
+          <input type="checkbox" id="optFlowSeq" checked> Chuyển flowchart sang sequence
+        </label>
       </section>
     </aside>
 
