@@ -410,12 +410,57 @@ function adaptDarkSvg(svgEl, src = '') {
   }
 }
 
+// ---------- Tô màu khung alt / opt / loop / par lồng nhau theo tầng ----------
+// Mỗi khung là một <g> chứa viền (.loopLine), nhãn góc (.labelBox/.labelText) và tiêu đề
+// điều kiện (.loopText/.sectionTitle). Độ lồng = số khung khác bao quanh nó.
+const FRAME_COLORS = {
+  light: ['#2B6CB0', '#B7791F', '#0F766E', '#B83280'],
+  dark: ['#6AA5E0', '#E3B341', '#4FC3B5', '#E58BB0'],
+};
+function colorizeFrames(svgEl, theme) {
+  if (svgEl.getAttribute('aria-roledescription') !== 'sequence') return;
+  const groups = [...new Set([...svgEl.querySelectorAll('.loopLine')].map((l) => l.parentElement))];
+  const boxes = groups.map((g) => {
+    const xs = [];
+    const ys = [];
+    for (const l of g.querySelectorAll('.loopLine')) {
+      xs.push(+l.getAttribute('x1'), +l.getAttribute('x2'));
+      ys.push(+l.getAttribute('y1'), +l.getAttribute('y2'));
+    }
+    return { g, x1: Math.min(...xs), x2: Math.max(...xs), y1: Math.min(...ys), y2: Math.max(...ys) };
+  });
+  const palette = FRAME_COLORS[theme] || FRAME_COLORS.light;
+  const set = (el, prop, val) => el.style.setProperty(prop, val, 'important');
+  for (const b of boxes) {
+    const depth = boxes.filter((o) => o !== b && o.x1 <= b.x1 + 0.5 && o.x2 >= b.x2 - 0.5 && o.y1 <= b.y1 + 0.5 && o.y2 >= b.y2 - 0.5).length;
+    const color = palette[depth % palette.length];
+    for (const l of b.g.querySelectorAll('.loopLine')) {
+      // Viền ngoài đậm, đường phân cách else mảnh hơn
+      const edge = [b.y1, b.y2].includes(+l.getAttribute('y1')) && l.getAttribute('y1') === l.getAttribute('y2')
+        || [b.x1, b.x2].includes(+l.getAttribute('x1')) && l.getAttribute('x1') === l.getAttribute('x2');
+      set(l, 'stroke', color);
+      set(l, 'stroke-width', edge ? '1.6px' : '1px');
+      set(l, 'stroke-dasharray', edge ? '5 3' : '2 3');
+    }
+    for (const box of b.g.querySelectorAll('.labelBox')) {
+      set(box, 'stroke', color);
+      set(box, 'fill', color);
+      set(box, 'fill-opacity', theme === 'dark' ? '0.28' : '0.14');
+    }
+    for (const t of b.g.querySelectorAll('.labelText, .labelText tspan, .loopText, .loopText tspan, .sectionTitle, .sectionTitle tspan')) {
+      set(t, 'fill', color);
+      set(t, 'font-weight', '600');
+    }
+  }
+}
+
 function paintDiagram(fig, d, svg) {
   const frame = $('.diagram__frame', fig);
   $('figcaption', fig).innerHTML = captionHtml(Number(fig.dataset.diagram) + 1, d);
   frame.innerHTML = svg;
   prepareSvg($('svg', frame), fig, d);
   if (effectiveTheme() === 'dark') adaptDarkSvg($('svg', frame), diagramSrc(d));
+  colorizeFrames($('svg', frame), effectiveTheme());
   frame.append(diagramTools(fig, d));
 }
 
@@ -494,7 +539,9 @@ async function lightSvgElement(fig) {
   const index = Number(fig.dataset.diagram);
   const box = document.createElement('div');
   box.innerHTML = await lightSvg(index);
-  return prepareSvg($('svg', box), fig, state.diagrams[index]);
+  const svgEl = prepareSvg($('svg', box), fig, state.diagrams[index]);
+  colorizeFrames(svgEl, 'light'); // PDF / ảnh: dùng bảng màu sáng
+  return svgEl;
 }
 
 // Đổi theme: vẽ lại sơ đồ tại chỗ (không dựng lại cả tài liệu để giữ vị trí cuộn)
