@@ -1,0 +1,166 @@
+/* Kiểu trình bày tài liệu — dùng chung cho bản xem trước và bản PDF (server nhúng file này khi in) */
+
+.doc {
+  --ink: #18181B;
+  --ink-2: #52525B;
+  --ink-3: #A1A1AA;
+  --line: #E4E4E7;
+  --wash: #F8FAFC;
+  --accent: #2B6CB0;
+  --accent-tint: #EAF1F8;
+  --rose: #BE123C;
+  --font-sans: 'Be Vietnam Pro', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
+
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 0.975rem;
+  line-height: 1.7;
+  font-feature-settings: 'kern', 'liga';
+  overflow-wrap: break-word;
+}
+
+.doc-body > :first-child { margin-top: 0; }
+
+.doc h1, .doc h2, .doc h3, .doc h4, .doc h5, .doc h6 {
+  color: var(--ink);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin: 2.2em 0 0.7em;
+  scroll-margin-top: 80px;
+}
+.doc h1 { font-size: 1.875rem; line-height: 1.15; margin-top: 0.4em; }
+.doc h2 { font-size: 1.375rem; padding-bottom: 0.4em; border-bottom: 1px solid var(--line); }
+.doc h3 { font-size: 1.125rem; }
+.doc h4 { font-size: 1rem; }
+.doc h5, .doc h6 { font-size: 0.925rem; color: var(--ink-2); }
+
+.doc p, .doc ul, .doc ol, .doc dl, .doc blockquote, .doc table, .doc pre, .doc figure { margin: 0 0 1.1em; }
+.doc ul, .doc ol { padding-left: 1.5em; }
+.doc li { margin: 0.25em 0; }
+.doc li > ul, .doc li > ol { margin: 0.25em 0 0; }
+.doc li:has(> input[type='checkbox']) { list-style: none; margin-left: -1.4em; }
+.doc li > input[type='checkbox'] { margin: 0 0.5em 0 0; accent-color: var(--accent); vertical-align: -0.1em; }
+
+.doc a { color: var(--accent); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+.doc strong { font-weight: 600; }
+.doc hr { border: 0; border-top: 1px solid var(--line); margin: 2em 0; }
+.doc img { max-width: 100%; height: auto; border-radius: 0.5rem; }
+
+.doc blockquote {
+  margin-left: 0;
+  padding: 0.6em 1em;
+  border-left: 3px solid var(--accent);
+  background: var(--wash);
+  color: var(--ink-2);
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+.doc blockquote > :last-child { margin-bottom: 0; }
+
+/* Mã */
+.doc code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--wash);
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+  padding: 0.1em 0.35em;
+}
+.doc pre {
+  background: var(--wash);
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  padding: 0.9rem 1.1rem;
+  overflow-x: auto;
+  line-height: 1.55;
+}
+.doc code, .doc pre { font-variant-ligatures: none; font-feature-settings: 'liga' 0, 'calt' 0; }
+.doc pre code { background: none; border: 0; padding: 0; font-size: 0.82rem; white-space: pre; }
+.doc pre code.hljs { background: none; padding: 0; }
+
+/* Bảng */
+.doc .table-wrap { overflow-x: auto; margin: 0 0 1.25em; }
+.doc table { width: 100%; border-collapse: collapse; font-size: 0.9rem; line-height: 1.55; margin: 0; }
+.doc th, .doc td { border: 1px solid var(--line); padding: 0.5em 0.75em; text-align: left; vertical-align: top; }
+.doc th { background: var(--wash); font-weight: 600; }
+.doc thead { display: table-header-group; }
+
+/* Sơ đồ */
+.doc .diagram { margin: 1.6em 0 1.8em; }
+.doc .diagram__frame {
+  position: relative;
+  background: var(--wash);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  overflow-x: auto;
+  text-align: center;
+}
+.doc .diagram__frame svg { max-width: 100%; height: auto; display: inline-block; }
+/* Gantt: bỏ vạch "hôm nay" — vô nghĩa trong tài liệu in */
+.doc .diagram__frame svg .today { display: none; }
+.doc .diagram figcaption {
+  margin-top: 0.6em;
+  font-size: 0.85rem;
+  color: var(--ink-2);
+  text-align: center;
+}
+.doc .diagram figcaption .fig-no {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-right: 0.35em;
+}
+.doc .diagram--error .diagram__frame {
+  text-align: left;
+  background: #FFF5F7;
+  border-color: #F3C6D1;
+  border-left: 3px solid var(--rose);
+}
+.doc .diagram__error-msg { color: var(--rose); font-size: 0.85rem; font-weight: 500; margin: 0 0 0.6em; white-space: pre-wrap; }
+.doc .diagram__error-src { margin: 0; background: #fff; }
+
+/* Trang bìa & mục lục (chỉ có trong PDF) */
+.pdf-cover {
+  min-height: 230mm;
+  display: grid;
+  align-content: center;
+  gap: 1.25rem;
+  break-after: page;
+  border-left: 4px solid var(--accent);
+  padding-left: 12mm;
+}
+.pdf-cover__kind { font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
+.pdf-cover__title { font-size: 2.4rem; line-height: 1.15; margin: 0; letter-spacing: -0.025em; border: 0; }
+.pdf-cover__meta { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 1.25rem; margin: 1.5rem 0 0; font-size: 0.9rem; }
+.pdf-cover__meta dt { color: var(--ink-2); }
+.pdf-cover__meta dd { margin: 0; font-family: var(--font-mono); font-size: 0.85rem; }
+
+.pdf-toc { break-after: page; }
+.pdf-toc__title { margin-top: 0 !important; }
+.pdf-toc ol { list-style: none; padding: 0; margin: 0; }
+.pdf-toc li { margin: 0.3em 0; }
+.pdf-toc li.lvl-1 { font-weight: 600; margin-top: 0.8em; }
+.pdf-toc li.lvl-2 { padding-left: 1.25em; }
+.pdf-toc li.lvl-3 { padding-left: 2.5em; font-size: 0.92em; color: var(--ink-2); }
+.pdf-toc a { color: inherit; text-decoration: none; }
+
+/* In ấn */
+body.pdf { margin: 0; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body.pdf .doc { font-size: 10.5pt; }
+
+@media print {
+  .doc h1, .doc h2, .doc h3, .doc h4 { break-after: avoid; page-break-after: avoid; }
+  .doc .diagram, .doc tr, .doc blockquote, .doc img { break-inside: avoid; page-break-inside: avoid; }
+  .doc pre { white-space: pre-wrap; overflow: visible; }
+  .doc pre code { white-space: pre-wrap; }
+  .doc .table-wrap, .doc .diagram__frame { overflow: visible; }
+  .doc .diagram__frame { padding: 0.8rem; }
+  .doc .diagram__frame svg { max-width: 100% !important; max-height: 225mm; }
+  body.pdf.landscape .doc .diagram__frame svg { max-height: 150mm; }
+  .doc a { color: var(--ink); }
+  .doc .diagram__tools { display: none !important; }
+  .doc p, .doc li { orphans: 3; widows: 3; }
+}

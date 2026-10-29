@@ -1,0 +1,6 @@
+node_modules/
+public/vendor/
+lib/pdf-assets.generated.js
+.vercel/
+*.pdf
+.tmp/

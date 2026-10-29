@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>convertSRS — Chuyển Markdown sang PDF / TXT</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/vendor/fonts/fonts.css">
+  <link rel="stylesheet" href="/vendor/hljs-github.css">
+  <link rel="stylesheet" href="/css/document.css">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand__mark" aria-hidden="true"></span>
+      <span class="brand__name">convertSRS</span>
+    </div>
+    <div class="topbar__file" id="fileLabel" hidden>
+      <span class="topbar__file-name" id="fileName"></span>
+      <span class="topbar__file-meta" id="fileMeta"></span>
+    </div>
+    <div class="topbar__actions">
+      <button class="btn btn--ghost" id="btnTxt" disabled>Tải TXT</button>
+      <button class="btn btn--primary" id="btnPdf" disabled>Tải PDF</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <section class="panel">
+        <h2 class="panel__title">Nguồn tài liệu</h2>
+        <div class="segmented" role="radiogroup" aria-label="Cách nhập tài liệu">
+          <button class="segmented__item is-active" role="radio" aria-checked="true" data-source="file">Import file</button>
+          <button class="segmented__item" role="radio" aria-checked="false" data-source="paste">Dán văn bản</button>
+        </div>
+        <div data-source-pane="file">
+          <label class="dropzone" id="dropzone">
+            <input type="file" id="fileInput" accept=".md,.markdown,.mdown,.mkd,.txt,text/markdown,text/plain">
+            <span class="dropzone__main">Kéo thả file <code>.md</code> vào đây</span>
+            <span class="dropzone__sub">hoặc bấm để chọn file từ máy</span>
+          </label>
+        </div>
+        <div data-source-pane="paste" hidden>
+          <textarea class="paste-box" id="pasteBox" rows="6" spellcheck="false" placeholder="Dán nội dung Markdown vào đây…"></textarea>
+          <div class="paste-actions">
+            <button class="btn btn--primary btn--sm" id="btnPasteOpen">Mở nội dung đã dán</button>
+            <button class="btn btn--ghost btn--sm" id="btnClipboard">Lấy từ clipboard</button>
+          </div>
+        </div>
+        <button class="btn btn--text" id="btnSample">Mở tài liệu SRS mẫu</button>
+      </section>
+
+      <section class="panel panel--grow">
+        <h2 class="panel__title">Mục lục <span class="panel__count" id="tocCount"></span></h2>
+        <nav class="toc" id="toc"><p class="muted">Chưa có tài liệu.</p></nav>
+      </section>
+
+      <section class="panel">
+        <h2 class="panel__title">Tuỳ chọn PDF</h2>
+        <div class="field-row">
+          <label class="field">
+            <span class="field__label">Khổ giấy</span>
+            <select id="optFormat"><option value="A4">A4</option><option value="Letter">Letter</option></select>
+          </label>
+          <label class="field">
+            <span class="field__label">Hướng</span>
+            <select id="optOrient"><option value="portrait">Dọc</option><option value="landscape">Ngang</option></select>
+          </label>
+        </div>
+        <label class="check"><input type="checkbox" id="optCover"> Trang bìa</label>
+        <label class="check"><input type="checkbox" id="optToc" checked> Trang mục lục</label>
+        <label class="check"><input type="checkbox" id="optPageNo" checked> Đầu trang &amp; số trang</label>
+        <button class="btn btn--text" id="btnPrint" disabled>In bằng trình duyệt</button>
+      </section>
+    </aside>
+
+    <main class="workspace">
+      <div class="tabs" role="tablist">
+        <button class="tab is-active" role="tab" data-tab="preview" aria-selected="true">Đọc</button>
+        <button class="tab" role="tab" data-tab="raw" aria-selected="false">Markdown gốc</button>
+        <button class="tab" role="tab" data-tab="source" aria-selected="false">Soạn / Dán</button>
+        <button class="tab" role="tab" data-tab="text" aria-selected="false">Bản TXT</button>
+        <span class="tabs__status" id="status" aria-live="polite"></span>
+      </div>
+
+      <section class="pane is-active" data-pane="preview">
+        <div class="paper">
+          <div class="empty" id="empty">
+            <div class="empty__lead">
+              <h1 class="empty__title">Đọc tài liệu SRS viết bằng Markdown, xuất ra PDF hoặc TXT.</h1>
+              <p class="empty__text">Import file <code>.md</code> hoặc dán nội dung (Ctrl+V ngay tại đây). Đọc trực tiếp không cần chuyển đổi; khi cần mới tải PDF hoặc TXT. Sơ đồ Mermaid được vẽ dạng vector, đánh số hình, giữ nguyên độ nét khi in.</p>
+              <div class="empty__actions">
+                <button class="btn btn--primary" id="btnEmptyOpen">Chọn file Markdown</button>
+                <button class="btn btn--ghost" id="btnEmptyPaste">Dán văn bản</button>
+                <button class="btn btn--text" id="btnEmptySample">Xem tài liệu mẫu</button>
+              </div>
+            </div>
+            <div class="empty__aside">
+              <h2 class="empty__aside-title">Sơ đồ hỗ trợ</h2>
+              <ul class="empty__list">
+                <li><code>flowchart</code> Luồng xử lý</li>
+                <li><code>sequenceDiagram</code> Tuần tự</li>
+                <li><code>classDiagram</code> Lớp</li>
+                <li><code>erDiagram</code> Thực thể quan hệ</li>
+                <li><code>stateDiagram-v2</code> Trạng thái</li>
+                <li><code>gantt</code> Kế hoạch</li>
+                <li><code>journey</code>, <code>pie</code>, <code>mindmap</code>, <code>timeline</code>…</li>
+              </ul>
+              <p class="empty__hint">Viết sơ đồ trong khối <code>```mermaid</code>. Thêm dòng <code>%% caption: Tên hình</code> để đặt chú thích.</p>
+            </div>
+          </div>
+
+          <div class="skeleton" id="skeleton" hidden aria-hidden="true">
+            <div class="sk sk--title"></div>
+            <div class="sk sk--line"></div><div class="sk sk--line"></div><div class="sk sk--line sk--short"></div>
+            <div class="sk sk--block"></div>
+            <div class="sk sk--line"></div><div class="sk sk--line sk--short"></div>
+          </div>
+
+          <div class="doc" id="doc" hidden><article class="doc-body" id="docBody"></article></div>
+        </div>
+      </section>
+
+      <section class="pane" data-pane="raw">
+        <div class="paper paper--raw">
+          <div class="raw-head">
+            <span class="raw-head__label">Nguyên văn file Markdown — không chuyển đổi</span>
+            <div class="raw-head__tools">
+              <label class="check check--sm"><input type="checkbox" id="optWrap"> Ngắt dòng</label>
+              <button class="btn btn--ghost btn--sm" id="btnCopyRaw" disabled>Sao chép</button>
+              <button class="btn btn--ghost btn--sm" id="btnMd" disabled>Tải .md</button>
+            </div>
+          </div>
+          <div class="raw-view" id="rawView"><p class="muted">Chưa có tài liệu.</p></div>
+        </div>
+      </section>
+
+      <section class="pane" data-pane="source">
+        <div class="editor">
+          <p class="editor__hint">Dán hoặc sửa trực tiếp nội dung Markdown — tab Đọc và Bản TXT cập nhật theo.</p>
+          <textarea id="editor" spellcheck="false" placeholder="# Tiêu đề tài liệu&#10;&#10;Nội dung Markdown..."></textarea>
+        </div>
+      </section>
+
+      <section class="pane" data-pane="text">
+        <div class="paper paper--text">
+          <pre class="txt-preview" id="txtPreview">Chưa có tài liệu.</pre>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog class="viewer" id="viewer">
+    <div class="viewer__bar">
+      <span class="viewer__title" id="viewerTitle"></span>
+      <div class="viewer__tools">
+        <button class="btn btn--ghost btn--sm" data-zoom="-1" aria-label="Thu nhỏ">−</button>
+        <span class="viewer__zoom" id="viewerZoom">100%</span>
+        <button class="btn btn--ghost btn--sm" data-zoom="1" aria-label="Phóng to">+</button>
+        <button class="btn btn--ghost btn--sm" data-zoom="0">Vừa khung</button>
+        <button class="btn btn--ghost btn--sm" id="viewerClose">Đóng</button>
+      </div>
+    </div>
+    <div class="viewer__stage" id="viewerStage"></div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <script src="/vendor/marked.js"></script>
+  <script src="/vendor/purify.js"></script>
+  <script src="/vendor/highlight.js"></script>
+  <script src="/vendor/mermaid.js"></script>
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
