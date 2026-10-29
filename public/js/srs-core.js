@@ -294,14 +294,19 @@ export function outline(markdown, { lexer }) {
 }
 
 // ---------- Chuyển flowchart / graph sang sequenceDiagram ----------
-// Mỗi node -> participant, mỗi cạnh A -> B -> một message (theo thứ tự xuất hiện),
-// node điều kiện {…} -> khối alt/else, subgraph -> box. Trả về null nếu không chuyển được
-// (cú pháp lạ, không có cạnh) để nơi gọi giữ nguyên sơ đồ gốc.
+// Hai kiểu flowchart, hai cách chuyển:
+//  - Luồng nghiệp vụ (node là bước xử lý, có điều kiện / Bắt đầu-Kết thúc / nhãn dạng câu):
+//    cột = người/bộ phận thực hiện (subgraph, hoặc chủ ngữ đầu nhãn, mặc định "Hệ thống"),
+//    bước = message đánh số theo thứ tự luồng, nhánh ngoại lệ -> opt, nhánh tách-gộp -> alt/else,
+//    vòng lặp -> ghi chú "Quay lại bước n".
+//  - Sơ đồ kiến trúc (node là thành phần): node -> participant, cạnh -> message, subgraph -> box.
+// Trả về null nếu không chuyển được để nơi gọi giữ nguyên sơ đồ gốc.
 // Thêm dòng `%% giữ nguyên` (hoặc `%% keep`) vào sơ đồ để không chuyển.
 
 const KEEP_RE = /^\s*%%\s*(?:giữ nguyên|giu nguyen|keep|no-sequence)\s*$/im;
 const SKIP_STMT_RE = /^(?:classDef|class|style|linkStyle|click|direction|accTitle|accDescr)\b/;
-const ACTOR_RE = /\b(?:người dùng|nguoi dung|nhân viên|khách hàng|khach hang|quản lý|quản trị|admin|user|customer|actor|client|end user)\b/i;
+// Không dùng \b: JS coi chữ có dấu (ý, ạ…) không phải ký tự từ nên \b sai với tiếng Việt
+const ACTOR_RE = /(?<!\p{L})(?:người dùng|nguoi dung|nhân viên|khách hàng|khach hang|quản lý|quản trị|admin|user|customer|actor|client|end user)(?!\p{L})/iu;
 const SHAPES = [
   ['(((', ')))'], ['((', '))'], ['([', '])'], ['[[', ']]'], ['[(', ')]'], ['{{', '}}'],
   ['[/', ['/]', '\\]']], ['[\\', ['\\]', '/]']], ['>', ']'], ['[', ']'], ['(', ')'], ['{', '}'],
@@ -337,6 +342,195 @@ function splitStatements(line) {
   }
   out.push(cur);
   return out.map((s) => s.trim()).filter(Boolean);
+}
+
+// Chủ ngữ thường gặp ở đầu nhãn bước trong SRS -> tên cột (làn) thực hiện bước đó
+const SUBJECTS = [
+  'người dùng', 'khách hàng', 'nhân viên', 'quản lý', 'quản trị viên', 'admin', 'hệ thống', 'máy chủ',
+  'server', 'backend', 'frontend', 'ứng dụng di động', 'ứng dụng', 'app', 'website', 'cơ sở dữ liệu', 'csdl',
+  'database', 'ngân hàng', 'cổng thanh toán', 'đối tác', 'bên thứ ba', 'phòng nhân sự', 'nhân sự', 'kế toán',
+  'giám đốc', 'trưởng phòng', 'lãnh đạo', 'văn thư', 'kho', 'thủ kho', 'đơn vị vận chuyển', 'shipper',
+  'chăm sóc khách hàng', 'cskh', 'kỹ thuật', 'user', 'system', 'client', 'customer', 'api',
+].sort((a, b) => b.length - a.length);
+const DEFAULT_LANE = 'Hệ thống';
+const TERMINAL_RE = /^(?:bắt đầu|kết thúc|start|end|begin|stop|hoàn thành|hoàn tất|finish|done)$/i;
+const DECISION_SHAPES = new Set(['{', 'diamond', 'decision', 'diam', 'rhombus', 'question']);
+const capFirst = (t) => (t ? t[0].toLocaleUpperCase('vi') + t.slice(1) : t);
+
+function matchSubject(label) {
+  const lower = label.toLocaleLowerCase('vi');
+  for (const sub of SUBJECTS) {
+    if (lower.startsWith(sub) && (lower.length === sub.length || /[\s:,]/.test(lower[sub.length]))) {
+      return { name: capFirst(label.slice(0, sub.length)), rest: label.slice(sub.length).replace(/^[\s:,]+/, '') };
+    }
+  }
+  return null;
+}
+
+// Luồng nghiệp vụ nếu có node điều kiện, node Bắt đầu/Kết thúc, hoặc đa số nhãn là câu (>= 3 từ)
+function isProcessFlow(nodes) {
+  const list = [...nodes.values()];
+  if (list.some((n) => DECISION_SHAPES.has(n.shape) || TERMINAL_RE.test(n.label.trim()))) return true;
+  const sentences = list.filter((n) => n.label.trim().split(/\s+/).length >= 3).length;
+  return sentences * 2 >= list.length;
+}
+
+function processSequence({ nodes, edges, boxes, front }) {
+  const body = [];
+  const lanes = new Map(); // key -> { name, order }
+  const laneKey = (name) => name.toLocaleLowerCase('vi');
+  const useLane = (name) => {
+    const key = laneKey(name);
+    if (!lanes.has(key)) lanes.set(key, { name, order: lanes.size });
+    return key;
+  };
+  const isDecision = (n) => DECISION_SHAPES.has(n.shape);
+  const isTerminal = (n) => TERMINAL_RE.test(n.label.trim());
+  const live = edges.filter((e) => e.from !== e.to);
+  const outs = (id) => live.filter((e) => e.from === id);
+
+  // Cột thực hiện và nội dung bước của một node
+  const info = (n) => {
+    const sub = matchSubject(n.label);
+    let lane;
+    let action = n.label;
+    if (n.box >= 0 && boxes[n.box]) {
+      lane = boxes[n.box].title;
+      if (sub && laneKey(sub.name) === laneKey(lane)) action = sub.rest;
+    } else if (sub) {
+      lane = sub.name;
+      action = sub.rest;
+    } else lane = DEFAULT_LANE;
+    return { lane, action: capFirst(action || n.label) };
+  };
+
+  const visited = new Set();
+  const stepOf = new Map();
+  let step = 0;
+  const pid = (key) => 'L' + lanes.get(key).order;
+
+  function emitStep(n, fromKey, indent, edgeLabel) {
+    const { lane, action } = info(n);
+    const to = useLane(lane);
+    const from = fromKey || to;
+    const text = action + (edgeLabel ? ` (${edgeLabel})` : '');
+    body.push({ indent, from, to, text });
+    stepOf.set(n.id, ++step);
+    return to;
+  }
+  function note(laneKeyOrNull, indent, text) {
+    const key = laneKeyOrNull || useLane(DEFAULT_LANE);
+    body.push({ indent, note: key, text });
+  }
+  function backRef(id, laneK, indent) {
+    const n = nodes.get(id);
+    let text;
+    if (stepOf.has(id)) text = `Quay lại bước ${stepOf.get(id)} — ${info(n).action}`;
+    else if (isDecision(n)) text = `Quay lại kiểm tra: ${n.label}`;
+    else if (isTerminal(n)) text = n.label;
+    else text = `Quay lại: ${n.label}`;
+    note(laneK, indent, text);
+  }
+
+  // Các node đi tới được từ start (không đi qua node đã duyệt và điểm dừng), theo thứ tự BFS
+  function reach(start, stop) {
+    const seen = [];
+    const set = new Set();
+    const queue = [start];
+    while (queue.length) {
+      const id = queue.shift();
+      if (set.has(id) || id === stop || visited.has(id)) continue;
+      set.add(id);
+      seen.push(id);
+      for (const e of outs(id)) queue.push(e.to);
+    }
+    return seen;
+  }
+  function findJoin(targets, stop) {
+    const lists = targets.map((t) => reach(t, stop));
+    const sets = lists.map((l) => new Set(l));
+    return lists[0].find((id) => sets.every((st) => st.has(id))) || null;
+  }
+
+  function walk(start, fromKey, indent, stopAt, edgeLabel = '') {
+    let cur = start;
+    let lane = fromKey;
+    let label = edgeLabel;
+    while (cur && cur !== stopAt) {
+      const n = nodes.get(cur);
+      if (visited.has(cur)) { backRef(cur, lane, indent); return lane; }
+      visited.add(cur);
+      const o = outs(cur);
+
+      if (o.length > 1) {
+        const dec = isDecision(n);
+        if (!dec && !isTerminal(n)) lane = emitStep(n, lane, indent, label);
+        // Điều kiện thuộc một làn cụ thể (subgraph / chủ ngữ): chuyển sang làn đó để xét,
+        // các nhánh xuất phát từ làn này
+        const decStep = dec && (n.box >= 0 || matchSubject(n.label));
+        if (decStep) lane = emitStep(n, lane, indent, label);
+        const join = findJoin(o.map((e) => e.to), stopAt);
+        let main = null;
+        let side = o;
+        if (!join) {
+          // Không gộp lại: nhánh đi xa nhất là luồng chính, các nhánh còn lại là ngoại lệ
+          const sizes = o.map((e) => reach(e.to, stopAt).length);
+          const max = Math.max(...sizes);
+          if (sizes.filter((x) => x === max).length === 1) {
+            const k = sizes.indexOf(max);
+            main = o[k];
+            side = o.filter((_, j) => j !== k);
+          }
+        }
+        const cond = dec && !decStep ? n.label : ''; // điều kiện đã là một bước thì tiêu đề nhánh chỉ cần nhãn nhánh
+        const kw = dec ? (main && side.length === 1 ? 'opt' : 'alt') : 'par';
+        side.forEach((e, k) => {
+          const head = dec
+            ? (e.label ? (k === 0 && cond ? `${cond} — ${e.label}` : e.label) : (k === 0 ? cond : ''))
+            : (e.label || 'Song song');
+          body.push({ indent, raw: `${k === 0 ? kw : dec ? 'else' : 'and'} ${head}`.trimEnd() });
+          const before = body.length;
+          walk(e.to, lane, indent + '    ', join || stopAt);
+          if (body.length === before) note(lane, indent + '    ', 'Bỏ qua');
+        });
+        body.push({ indent, raw: 'end' });
+        if (main) { cur = main.to; label = dec ? '' : main.label; continue; }
+        cur = join;
+        label = '';
+        continue;
+      }
+
+      if (!isTerminal(n)) lane = emitStep(n, lane, indent, label);
+      if (!o.length) return lane;
+      label = o[0].label;
+      cur = o[0].to;
+    }
+    return lane;
+  }
+
+  const indeg = new Map([...nodes.keys()].map((id) => [id, 0]));
+  for (const e of live) indeg.set(e.to, indeg.get(e.to) + 1);
+  const starts = [...nodes.keys()].filter((id) => indeg.get(id) === 0);
+  for (const id of starts.length ? starts : [nodes.keys().next().value]) if (!visited.has(id)) walk(id, null, '    ', null);
+  for (const id of nodes.keys()) if (!visited.has(id)) walk(id, null, '    ', null);
+  if (!step) return null;
+
+  // Cột: người dùng / actor lên trước, còn lại theo thứ tự xuất hiện
+  const laneList = [...lanes.entries()].sort(([, a], [, b]) => (ACTOR_RE.test(b.name) - ACTOR_RE.test(a.name)) || a.order - b.order);
+  laneList.forEach(([, l], k) => { l.order = k; });
+  const count = laneList.length;
+  // Ít cột: nới rộng để nhãn bước dài không bị ngắt vụn; nhiều cột: thu hẹp
+  const init = count <= 2 ? { width: 150, actorMargin: 170 } : count === 3 ? { width: 140, actorMargin: 110 }
+    : count === 4 ? { width: 130, actorMargin: 70 } : count > 9 ? { width: 100, actorMargin: 6 } : count > 6 ? { width: 108, actorMargin: 10 } : null;
+  const out = [front + (init ? `%%{init: ${JSON.stringify({ sequence: init })}}%%\n` : '') + 'sequenceDiagram', '    autonumber'];
+  for (const [key, l] of laneList) out.push(`    ${ACTOR_RE.test(l.name) ? 'actor' : 'participant'} ${pid(key)} as ${seqText(l.name)}`);
+  for (const b of body) {
+    if (b.raw) out.push(b.indent + seqText(b.raw));
+    else if (b.note) out.push(`${b.indent}Note over ${pid(b.note)}: ${seqText(b.text)}`);
+    // Bước tự thực hiện (mũi tên vòng) với nhãn ngắn: không ngắt dòng để khỏi bị vụn
+    else out.push(`${b.indent}${pid(b.from)}->>${pid(b.to)}: ${b.from === b.to && b.text.length <= 42 ? 'nowrap:' : ''}${seqText(b.text)}`);
+  }
+  return out.join('\n');
 }
 
 export function flowchartToSequence(src) {
@@ -506,6 +700,11 @@ export function flowchartToSequence(src) {
   for (const [id, title] of subgraphIds) {
     const n = nodes.get(id);
     if (n) { n.label = n.label === id ? title : n.label; n.box = -1; }
+  }
+
+  if (isProcessFlow(nodes)) {
+    const seq = processSequence({ nodes, edges: edges.filter((e) => e.kind !== 'hidden'), boxes, front });
+    if (seq) return seq;
   }
 
   // Node điều kiện {…}: có đúng nguồn vào và các nhánh ra đều là node thường -> alt/else
