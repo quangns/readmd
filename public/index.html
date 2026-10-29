@@ -36,6 +36,35 @@
         <button class="segmented__item" role="radio" aria-checked="false" data-theme-option="system" title="Theo cài đặt hệ thống">Hệ thống</button>
       </div>
       <button class="btn btn--ghost" id="btnTxt" disabled>Tải TXT</button>
+      <div class="print-wrap">
+        <button class="btn btn--ghost btn--icon" id="btnPrintMenu" aria-haspopup="dialog" aria-expanded="false" aria-controls="printMenu" title="Tuỳ chọn in / PDF">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M7 9V3.5h10V9"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v6.5H7z"/><path d="M17.5 12h.01"/>
+          </svg>
+          <span class="sr-only">Tuỳ chọn in / PDF</span>
+        </button>
+        <div class="print-menu" id="printMenu" role="dialog" aria-label="Tuỳ chọn in / PDF" hidden>
+          <div class="print-menu__head">Tuỳ chọn in / PDF</div>
+          <div class="field-row">
+            <label class="field">
+              <span class="field__label">Khổ giấy</span>
+              <select id="optFormat"><option value="A4">A4</option><option value="Letter">Letter</option></select>
+            </label>
+            <label class="field">
+              <span class="field__label">Hướng</span>
+              <select id="optOrient"><option value="portrait">Dọc</option><option value="landscape">Ngang</option></select>
+            </label>
+          </div>
+          <label class="check"><input type="checkbox" id="optCover"> Trang bìa</label>
+          <label class="check"><input type="checkbox" id="optToc" checked> Trang mục lục</label>
+          <label class="check"><input type="checkbox" id="optPageNo" checked> Đầu trang &amp; số trang</label>
+          <p class="print-menu__hint">Trang bìa, mục lục và số trang chỉ có trong file PDF tải về.</p>
+          <div class="print-menu__actions">
+            <button class="btn btn--ghost btn--sm" id="btnPrint" disabled>In</button>
+            <button class="btn btn--primary btn--sm" id="btnPdfMenu" disabled>Tải PDF</button>
+          </div>
+        </div>
+      </div>
       <button class="btn btn--primary" id="btnPdf" disabled>Tải PDF</button>
     </div>
   </header>
@@ -74,24 +103,6 @@
         <h2 class="panel__title">Hiển thị sơ đồ</h2>
         <label class="check"><input type="checkbox" id="optFlowSeq" checked> Chuyển flowchart sang sequence</label>
         <p class="panel__hint">Áp dụng cho xem, PDF và ảnh. Thêm dòng <code>%% giữ nguyên</code> vào sơ đồ để không chuyển.</p>
-      </section>
-
-      <section class="panel">
-        <h2 class="panel__title">Tuỳ chọn PDF</h2>
-        <div class="field-row">
-          <label class="field">
-            <span class="field__label">Khổ giấy</span>
-            <select id="optFormat"><option value="A4">A4</option><option value="Letter">Letter</option></select>
-          </label>
-          <label class="field">
-            <span class="field__label">Hướng</span>
-            <select id="optOrient"><option value="portrait">Dọc</option><option value="landscape">Ngang</option></select>
-          </label>
-        </div>
-        <label class="check"><input type="checkbox" id="optCover"> Trang bìa</label>
-        <label class="check"><input type="checkbox" id="optToc" checked> Trang mục lục</label>
-        <label class="check"><input type="checkbox" id="optPageNo" checked> Đầu trang &amp; số trang</label>
-        <button class="btn btn--text" id="btnPrint" disabled>In bằng trình duyệt</button>
       </section>
     </aside>
 

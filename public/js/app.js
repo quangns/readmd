@@ -15,6 +15,7 @@ const el = {
   rawView: $('#rawView'), optWrap: $('#optWrap'),
   editor: $('#editor'), txtPreview: $('#txtPreview'), status: $('#status'),
   dropOverlay: $('#dropOverlay'),
+  btnPrintMenu: $('#btnPrintMenu'), printMenu: $('#printMenu'), btnPdfMenu: $('#btnPdfMenu'),
   viewer: $('#viewer'), viewerStage: $('#viewerStage'), viewerTitle: $('#viewerTitle'), viewerZoom: $('#viewerZoom'),
   toast: $('#toast'),
 };
@@ -526,7 +527,7 @@ function loadMarkdown(text, { name = '', source = 'file', size } = {}) {
   el.fileName.textContent = name || (source === 'paste' ? 'Nội dung dán' : 'Tài liệu');
   const bytes = size ?? new Blob([state.markdown]).size;
   el.fileMeta.textContent = `${formatBytes(bytes)} · ${state.markdown.split('\n').length} dòng`;
-  for (const b of [el.btnPdf, el.btnTxt, el.btnPrint, el.btnMd, el.btnCopyRaw]) b.disabled = false;
+  for (const b of [el.btnPdf, el.btnTxt, el.btnPrint, el.btnPdfMenu, el.btnMd, el.btnCopyRaw]) b.disabled = false;
 
   return render();
 }
@@ -718,7 +719,41 @@ el.btnPdf.addEventListener('click', async () => {
   }
 });
 
-el.btnPrint.addEventListener('click', printFallback);
+el.btnPrint.addEventListener('click', () => { closePrintMenu(); printFallback(); });
+el.btnPdfMenu.addEventListener('click', () => { closePrintMenu(); el.btnPdf.click(); });
+
+// ---------- Menu tuỳ chọn in (nút máy in) ----------
+const PDF_OPTS_KEY = 'convertsrs-pdf-options';
+const PDF_OPT_FIELDS = { optFormat: 'value', optOrient: 'value', optCover: 'checked', optToc: 'checked', optPageNo: 'checked' };
+try {
+  const saved = JSON.parse(localStorage.getItem(PDF_OPTS_KEY) || '{}');
+  for (const [id, prop] of Object.entries(PDF_OPT_FIELDS)) if (id in saved) $('#' + id)[prop] = saved[id];
+} catch { /* bỏ qua dữ liệu hỏng */ }
+el.printMenu.addEventListener('change', () => {
+  const data = {};
+  for (const [id, prop] of Object.entries(PDF_OPT_FIELDS)) data[id] = $('#' + id)[prop];
+  localStorage.setItem(PDF_OPTS_KEY, JSON.stringify(data));
+});
+
+function openPrintMenu() {
+  el.printMenu.hidden = false;
+  el.btnPrintMenu.setAttribute('aria-expanded', 'true');
+  el.btnPrintMenu.classList.add('is-active');
+  $('#optFormat').focus();
+}
+function closePrintMenu() {
+  if (el.printMenu.hidden) return;
+  el.printMenu.hidden = true;
+  el.btnPrintMenu.setAttribute('aria-expanded', 'false');
+  el.btnPrintMenu.classList.remove('is-active');
+}
+el.btnPrintMenu.addEventListener('click', () => (el.printMenu.hidden ? openPrintMenu() : closePrintMenu()));
+document.addEventListener('pointerdown', (e) => {
+  if (!el.printMenu.hidden && !e.target.closest('.print-wrap')) closePrintMenu();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !el.printMenu.hidden) { closePrintMenu(); el.btnPrintMenu.focus(); }
+});
 
 const optFlowSeq = $('#optFlowSeq');
 optFlowSeq.checked = flowToSeqEnabled();
