@@ -4,3 +4,4 @@ lib/pdf-assets.generated.js
 .vercel/
 *.pdf
 .tmp/
+example/

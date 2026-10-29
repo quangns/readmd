@@ -1,6 +1,6 @@
 // convertSRS — đọc Markdown, xem trực tiếp hoặc xuất PDF / TXT.
 // Thư viện marked, DOMPurify, hljs, mermaid được nạp dạng global từ /vendor.
-import { diagramInfo, toText, slugger, splitFrontmatter, flowchartToSequence } from './srs-core.js';
+import { diagramInfo, toText, slugger, splitFrontmatter, flowchartToSequence, liftDiagramCaptions } from './srs-core.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -249,7 +249,8 @@ function htmlToText(html) {
 
 async function render() {
   const seq = ++state.renderSeq;
-  const { body, data } = splitFrontmatter(state.markdown.normalize('NFC'));
+  const { body: rawBody, data } = splitFrontmatter(state.markdown.normalize('NFC'));
+  const body = liftDiagramCaptions(rawBody);
   const headings = [];
   const diagrams = [];
   const html = marked.parse(body, {
