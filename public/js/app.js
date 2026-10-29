@@ -321,11 +321,101 @@ function prepareSvg(svgEl, fig, d) {
   return svgEl;
 }
 
+// ---------- Màu tác giả tự đặt trong sơ đồ khi xem ở giao diện tối ----------
+// rect rgb(245,245,245) / box rgb(...) trong sequence, style/classDef fill:#fff trong flowchart
+// giữ nguyên màu sáng dù theme tối -> chữ sáng trên nền sáng không đọc được.
+// Chỉ đổi khi hiển thị: nền sáng -> tông tối cùng sắc độ, chữ tối -> tông sáng. PDF/ảnh giữ màu gốc.
+const colorCtx = document.createElement('canvas').getContext('2d');
+function parseColor(str) {
+  const v = String(str || '').replace(/!important/i, '').trim();
+  if (!v || v === 'none' || v === 'transparent' || v.startsWith('url(')) return null;
+  colorCtx.fillStyle = '#010203';
+  colorCtx.fillStyle = v;
+  const out = colorCtx.fillStyle;
+  if (out === '#010203' && !/^#010203$/i.test(v)) return null; // màu không hợp lệ
+  let m = out.match(/^#([0-9a-f]{6})$/i);
+  if (m) { const n = parseInt(m[1], 16); return { r: n >> 16, g: (n >> 8) & 255, b: n & 255, a: 1 }; }
+  m = out.match(/^rgba?\(([^)]+)\)$/);
+  if (m) { const [r, g, b, a = 1] = m[1].split(',').map(Number); return { r, g, b, a }; }
+  return null;
+}
+function rgbToHsl({ r, g, b }) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  const h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [h / 6, s, l];
+}
+function hslToRgb(h, s, l) {
+  if (!s) return [l, l, l].map((x) => Math.round(x * 255));
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const f = (t) => {
+    t = (t + 1) % 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  return [f(h + 1 / 3), f(h), f(h - 1 / 3)].map((x) => Math.round(x * 255));
+}
+function darkVariant(str, kind) {
+  const c = parseColor(str);
+  if (!c || c.a === 0) return null;
+  const [h, s, l] = rgbToHsl(c);
+  let nl;
+  if (kind === 'bg' && l > 0.55) nl = 0.12 + (1 - l) * 0.3; // nền sáng -> tối, giữ sắc độ
+  else if (kind === 'text' && l < 0.45) nl = 0.86; // chữ tối -> sáng
+  else return null;
+  const [r, g, b] = hslToRgb(h, Math.min(s, kind === 'bg' ? 0.4 : 0.5), nl);
+  return c.a < 1 ? `rgba(${r}, ${g}, ${b}, ${c.a})` : `rgb(${r}, ${g}, ${b})`;
+}
+function adaptDarkSvg(svgEl, src = '') {
+  // classDef: màu nằm trong khối <style> của SVG (".ten>*{fill:…}", ".ten tspan{fill:…}").
+  // Chỉ sửa luật của các class tác giả khai báo, không đụng màu theme (mũi tên, đường nối…)
+  const classNames = [...src.matchAll(/^\s*classDef\s+([\w-]+(?:\s*,\s*[\w-]+)*)/gm)].flatMap((m) => m[1].split(/\s*,\s*/));
+  if (classNames.length) {
+    const classRe = new RegExp(`\\.(?:${classNames.map((c) => c.replace(/[-]/g, '\\$&')).join('|')})(?![\\w-])`);
+    for (const st of svgEl.querySelectorAll('style')) {
+      st.textContent = st.textContent.replace(/([^{}]+)\{([^{}]*)\}/g, (rule, sel, decls) => {
+        if (!classRe.test(sel)) return rule;
+        const textSel = /\b(tspan|text|span|p|label)\b/.test(sel);
+        const out = decls.replace(/(fill|color)\s*:\s*([^;!]+)(\s*!important)?/gi, (m, prop, val, imp = '') => {
+          const kind = prop.toLowerCase() === 'color' || textSel ? 'text' : 'bg';
+          const v = darkVariant(val, kind);
+          return v ? `${prop}:${v}${imp}` : m;
+        });
+        return `${sel}{${out}}`;
+      });
+    }
+  }
+  // Khối rect / box của sequence: màu nằm ở thuộc tính fill
+  for (const el of svgEl.querySelectorAll('rect.rect[fill]')) {
+    const v = darkVariant(el.getAttribute('fill'), 'bg');
+    if (v) el.setAttribute('fill', v);
+  }
+  // style / classDef / linkStyle trong flowchart: màu nằm trong style nội tuyến
+  for (const el of svgEl.querySelectorAll('[style*="fill"], [style*="color"]')) {
+    const isText = /^(text|tspan|span|div|p)$/i.test(el.tagName);
+    for (const prop of isText ? ['fill', 'color'] : ['fill']) {
+      const m = el.getAttribute('style').match(new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`, 'i'));
+      if (!m) continue;
+      const v = darkVariant(m[1], isText ? 'text' : 'bg');
+      if (v) el.style.setProperty(prop, v, 'important');
+    }
+  }
+}
+
 function paintDiagram(fig, d, svg) {
   const frame = $('.diagram__frame', fig);
   $('figcaption', fig).innerHTML = captionHtml(Number(fig.dataset.diagram) + 1, d);
   frame.innerHTML = svg;
   prepareSvg($('svg', frame), fig, d);
+  if (effectiveTheme() === 'dark') adaptDarkSvg($('svg', frame), diagramSrc(d));
   frame.append(diagramTools(fig, d));
 }
 
