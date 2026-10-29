@@ -396,7 +396,7 @@ function processSequence({ nodes, edges, boxes, front }) {
   // Cột thực hiện và nội dung bước của một node.
   // Bỏ số thứ tự viết tay ở đầu nhãn ("1. Lấy token") vì sơ đồ đã tự đánh số bước
   const info = (n) => {
-    const label = n.label.replace(/^\s*(?:bước\s*)?\d+(?:\.\d+)*[.):]\s+/i, '') || n.label;
+    const label = n.label.replace(/^\s*(?:bước\s*)?\d+[a-z]?(?:\.\d+[a-z]?)*[.):]\s+/i, '') || n.label;
     const sub = matchSubject(label);
     let lane;
     let action = label;
@@ -488,13 +488,25 @@ function processSequence({ nodes, edges, boxes, front }) {
           // Hình thoi: luồng chính đi tiếp ở ngoài, các nhánh còn lại vẽ thành đường riêng (opt/alt)
           let main = null;
           let side;
+          const wantRe = NEGATIVE_Q_RE.test(n.label) ? NO_RE : YES_RE;
+          const direct = join ? o.filter((e) => e.to === join) : [];
+          const steps = join ? o.filter((e) => e.to !== join) : [];
+          if (join && direct.length && steps.length === 1 && !wantRe.test(direct[0].label.trim())) {
+            // Nhánh bình thường có bước, nhánh kia nhảy thẳng tới điểm gộp:
+            // không bọc luồng chính vào khối, chỉ ghi nhánh nhảy bằng một khối nhỏ
+            body.push({ indent, raw: `opt ${direct[0].label || 'Không'}` });
+            note(lane, indent + '    ', `Chuyển tới: ${info(nodes.get(join)).action}`);
+            body.push({ indent, raw: 'end' });
+            cur = steps[0].to;
+            label = '';
+            continue;
+          }
           if (join) {
-            side = o.filter((e) => e.to !== join); // nhánh đi thẳng tới điểm gộp không có bước nào
+            side = steps; // nhánh đi thẳng tới điểm gộp không có bước nào
           } else {
             // Luồng chính theo nghĩa câu hỏi: câu khẳng định ("Hợp lệ?") -> nhánh Có/Yes đi tiếp,
             // câu mang nghĩa lỗi ("Sai quá 3 lần?") -> nhánh Không/No đi tiếp.
             // Nhãn nhánh không phải Có/Không thì lấy nhánh đi xa nhất.
-            const wantRe = NEGATIVE_Q_RE.test(n.label) ? NO_RE : YES_RE;
             let k = o.findIndex((e) => wantRe.test(e.label.trim()));
             if (k < 0) {
               const sizes = o.map((e) => reach(e.to, stopAt).length);
@@ -523,14 +535,12 @@ function processSequence({ nodes, edges, boxes, front }) {
           continue;
         }
 
-        // Rẽ nhánh song song (không phải điều kiện): mọi nhánh trong khối par
-        o.forEach((e, k) => {
-          body.push({ indent, raw: `${k === 0 ? 'par' : 'and'} ${e.label || 'Song song'}` });
-          const before = body.length;
-          walk(e.to, lane, indent + '    ', join || stopAt);
-          if (body.length === before) note(lane, indent + '    ', isTerminal(nodes.get(e.to)) ? 'Kết thúc luồng' : 'Bỏ qua');
-        });
-        body.push({ indent, raw: 'end' });
+        // Rẽ nhánh không phải điều kiện (một bước dẫn tới nhiều việc): viết lần lượt từng nhánh
+        // ở luồng chính, không dựng khung par lồng nhau; các nhánh dừng tại điểm gộp
+        // Nhánh phụ (không dẫn tới Kết thúc) viết trước, nhánh dẫn tới Kết thúc viết sau cùng
+        // để sơ đồ khép lại đúng ở cuối luồng chính
+        const toEnd = (e) => reach(e.to, join || stopAt).some((id) => isTerminal(nodes.get(id)));
+        [...o.filter((e) => !toEnd(e)), ...o.filter(toEnd)].forEach((e) => walk(e.to, lane, indent, join || stopAt));
         reachedEnd = false;
         cur = join;
         label = '';
