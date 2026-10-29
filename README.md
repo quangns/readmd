@@ -14,6 +14,7 @@ Giao diện thiết kế theo skill `taste-design` của [google-labs-code/stitc
 | PDF | Render bằng Chromium phía server → chữ chọn được, sơ đồ vector. Tuỳ chọn A4/Letter, dọc/ngang, trang bìa, trang mục lục, đầu trang + "Trang X / Y", bookmark PDF |
 | TXT | UTF-8 có BOM, xuống dòng CRLF (mở tốt trên Notepad). Bảng kẻ khung ASCII, sơ đồ ghi "[Hình n: loại — chú thích]" kèm mã nguồn |
 | Mục lục | Tự sinh từ tiêu đề + danh mục hình, đánh dấu mục đang đọc |
+| Giao diện | Chọn **Sáng / Tối / Hệ thống** trên thanh trên cùng (ghi nhớ trong trình duyệt, chế độ Hệ thống tự đổi theo OS). Sơ đồ được vẽ lại theo theme; file xuất (PDF, in, SVG/PNG) luôn dùng bản nền sáng |
 
 Đặt chú thích cho sơ đồ bằng dòng `%% caption: Tên hình` trong khối ` ```mermaid `, hoặc `title:` của Mermaid.
 

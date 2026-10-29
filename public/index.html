@@ -4,6 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>convertSRS — Chuyển Markdown sang PDF / TXT</title>
+  <meta name="color-scheme" content="light dark">
+  <script>
+    // Đặt theme trước khi trang hiển thị để không bị nháy nền sáng
+    (function () {
+      var m = localStorage.getItem('convertsrs-theme');
+      var dark = m === 'dark' || (m !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    })();
+  </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/vendor/fonts/fonts.css">
   <link rel="stylesheet" href="/vendor/hljs-github.css">
@@ -21,6 +30,11 @@
       <span class="topbar__file-meta" id="fileMeta"></span>
     </div>
     <div class="topbar__actions">
+      <div class="segmented segmented--theme" role="radiogroup" aria-label="Giao diện">
+        <button class="segmented__item" role="radio" aria-checked="false" data-theme-option="light" title="Giao diện sáng">Sáng</button>
+        <button class="segmented__item" role="radio" aria-checked="false" data-theme-option="dark" title="Giao diện tối">Tối</button>
+        <button class="segmented__item" role="radio" aria-checked="false" data-theme-option="system" title="Theo cài đặt hệ thống">Hệ thống</button>
+      </div>
       <button class="btn btn--ghost" id="btnTxt" disabled>Tải TXT</button>
       <button class="btn btn--primary" id="btnPdf" disabled>Tải PDF</button>
     </div>

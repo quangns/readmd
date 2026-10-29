@@ -26,13 +26,48 @@ const state = {
   headings: [],
   renderSeq: 0,
   diagramErrors: 0,
+  diagrams: [],
 };
+
+// ---------- Theme: sáng / tối / theo hệ thống ----------
+// Lựa chọn lưu trong localStorage; script nhỏ trong <head> đã đặt data-theme trước khi vẽ trang
+const THEME_KEY = 'convertsrs-theme';
+const darkQuery = matchMedia('(prefers-color-scheme: dark)');
+let themeOverride = null; // ép tạm 'light' khi in bằng trình duyệt
+
+function themeMode() {
+  const m = localStorage.getItem(THEME_KEY);
+  return m === 'light' || m === 'dark' ? m : 'system';
+}
+function effectiveTheme() {
+  if (themeOverride) return themeOverride;
+  const m = themeMode();
+  return m === 'system' ? (darkQuery.matches ? 'dark' : 'light') : m;
+}
+function applyTheme() {
+  const before = document.documentElement.dataset.theme;
+  const theme = effectiveTheme();
+  document.documentElement.dataset.theme = theme;
+  $$('[data-theme-option]').forEach((b) => {
+    const on = b.dataset.themeOption === themeMode();
+    b.classList.toggle('is-active', on);
+    b.setAttribute('aria-checked', String(on));
+  });
+  return before !== theme ? repaintDiagrams() : Promise.resolve();
+}
+$$('[data-theme-option]').forEach((b) => b.addEventListener('click', () => {
+  const mode = b.dataset.themeOption;
+  if (mode === 'system') localStorage.removeItem(THEME_KEY);
+  else localStorage.setItem(THEME_KEY, mode);
+  applyTheme();
+}));
+darkQuery.addEventListener('change', () => { if (themeMode() === 'system') applyTheme(); });
 
 const PDF_BODY_LIMIT = 4.3 * 1024 * 1024; // Vercel giới hạn request 4.5 MB
 
 // ---------- Mermaid ----------
 const FONT = "'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif";
-mermaid.initialize({
+const MERMAID_BASE = {
   startOnLoad: false,
   securityLevel: 'strict',
   theme: 'base',
@@ -46,7 +81,10 @@ mermaid.initialize({
   },
   er: { useMaxWidth: true },
   gantt: { useMaxWidth: true, useWidth: 760, barHeight: 22, fontSize: 12, sectionFontSize: 12, leftPadding: 110, axisFormat: '%d/%m', todayMarker: 'off' },
-  themeVariables: {
+};
+
+const MERMAID_THEMES = {
+  light: {
     fontFamily: FONT,
     fontSize: '14px',
     background: '#F8FAFC',
@@ -71,7 +109,75 @@ mermaid.initialize({
     clusterBkg: '#FFFFFF',
     clusterBorder: '#D4D4D8',
   },
-});
+  dark: {
+    darkMode: true,
+    fontFamily: FONT,
+    fontSize: '14px',
+    background: '#1F1F23',
+    primaryColor: '#1B2A3A',
+    primaryBorderColor: '#6AA5E0',
+    primaryTextColor: '#E4E4E7',
+    secondaryColor: '#27272A',
+    secondaryBorderColor: '#52525B',
+    tertiaryColor: '#18181B',
+    tertiaryBorderColor: '#3F3F46',
+    lineColor: '#A1A1AA',
+    textColor: '#E4E4E7',
+    mainBkg: '#1B2A3A',
+    nodeBorder: '#6AA5E0',
+    noteBkgColor: '#3A3420',
+    noteBorderColor: '#A68A3C',
+    noteTextColor: '#E4E4E7',
+    actorBkg: '#1B2A3A',
+    actorBorder: '#6AA5E0',
+    actorTextColor: '#E4E4E7',
+    actorLineColor: '#71717A',
+    signalColor: '#D4D4D8',
+    signalTextColor: '#E4E4E7',
+    labelBoxBkgColor: '#1B2A3A',
+    labelBoxBorderColor: '#6AA5E0',
+    labelTextColor: '#E4E4E7',
+    loopTextColor: '#E4E4E7',
+    sequenceNumberColor: '#18181B',
+    edgeLabelBackground: '#18181B',
+    clusterBkg: '#18181B',
+    clusterBorder: '#3F3F46',
+    titleColor: '#E4E4E7',
+    attributeBackgroundColorOdd: '#1F1F23',
+    attributeBackgroundColorEven: '#18181B',
+    taskBkgColor: '#1B2A3A',
+    taskBorderColor: '#6AA5E0',
+    taskTextColor: '#E4E4E7',
+    taskTextDarkColor: '#E4E4E7',
+    taskTextOutsideColor: '#E4E4E7',
+    activeTaskBkgColor: '#24456B',
+    activeTaskBorderColor: '#6AA5E0',
+    doneTaskBkgColor: '#3F3F46',
+    doneTaskBorderColor: '#71717A',
+    gridColor: '#3F3F46',
+    sectionBkgColor: '#1F1F23',
+    altSectionBkgColor: '#18181B',
+    sectionBkgColor2: '#1F1F23',
+  },
+};
+
+// mermaid.initialize là cấu hình toàn cục → xếp hàng các lượt render để không lẫn theme
+let mermaidQueue = Promise.resolve();
+let mermaidSeq = 0;
+function renderMermaid(src, theme) {
+  const job = mermaidQueue.then(async () => {
+    mermaid.initialize({ ...MERMAID_BASE, themeVariables: MERMAID_THEMES[theme] });
+    const id = `mmd-${++mermaidSeq}`;
+    try {
+      return (await mermaid.render(id, src)).svg;
+    } finally {
+      document.getElementById(id)?.remove();
+      document.getElementById('d' + id)?.remove();
+    }
+  });
+  mermaidQueue = job.catch(() => {});
+  return job;
+}
 
 // ---------- Markdown ----------
 function createRenderer(slug, headings, diagrams) {
@@ -142,35 +248,74 @@ async function render() {
   setStatus(`${headings.length} mục · ${diagrams.length} sơ đồ · đang vẽ…`);
 
   // Vẽ lần lượt từng sơ đồ; bỏ dở nếu đã có lượt render mới
+  state.diagrams = diagrams;
+  lightSvgCache.clear();
+  const theme = effectiveTheme();
   let errors = 0;
   for (const fig of $$('.diagram', el.docBody)) {
     if (seq !== state.renderSeq) return;
     const d = diagrams[Number(fig.dataset.diagram)];
-    const frame = $('.diagram__frame', fig);
-    const id = `mmd-${seq}-${fig.dataset.diagram}`;
     try {
-      const { svg } = await mermaid.render(id, d.src);
+      const svg = await renderMermaid(d.src, theme);
       if (seq !== state.renderSeq) return;
-      frame.innerHTML = svg;
-      const svgEl = $('svg', frame);
-      svgEl.removeAttribute('height');
-      // Không phóng to sơ đồ nhỏ quá kích thước gốc
-      const vbw = svgEl.viewBox.baseVal?.width;
-      if (vbw) svgEl.style.maxWidth = `${Math.ceil(vbw)}px`;
-      svgEl.setAttribute('role', 'img');
-      svgEl.setAttribute('aria-label', `Hình ${fig.dataset.diagram * 1 + 1}: ${d.caption || d.typeLabel}`);
-      frame.append(diagramTools(fig, d));
+      if (theme === 'light') lightSvgCache.set(Number(fig.dataset.diagram), svg);
+      paintDiagram(fig, d, svg);
     } catch (err) {
+      if (seq !== state.renderSeq) return;
       errors++;
-      document.getElementById(id)?.remove();
-      document.getElementById('d' + id)?.remove();
       fig.classList.add('diagram--error');
-      frame.innerHTML = `<p class="diagram__error-msg">Lỗi cú pháp sơ đồ: ${escapeHtml(cleanMermaidError(err))}</p>
+      $('.diagram__frame', fig).innerHTML = `<p class="diagram__error-msg">Lỗi cú pháp sơ đồ: ${escapeHtml(cleanMermaidError(err))}</p>
         <pre class="diagram__error-src"><code>${escapeHtml(d.src)}</code></pre>`;
     }
   }
   state.diagramErrors = errors;
   setStatus(`${headings.length} mục · ${diagrams.length} sơ đồ${errors ? ` · ${errors} sơ đồ lỗi` : ''}`, errors > 0);
+}
+
+function prepareSvg(svgEl, fig, d) {
+  svgEl.removeAttribute('height');
+  // Không phóng to sơ đồ nhỏ quá kích thước gốc
+  const vbw = svgEl.viewBox.baseVal?.width;
+  if (vbw) svgEl.style.maxWidth = `${Math.ceil(vbw)}px`;
+  svgEl.setAttribute('role', 'img');
+  svgEl.setAttribute('aria-label', `Hình ${Number(fig.dataset.diagram) + 1}: ${d.caption || d.typeLabel}`);
+  return svgEl;
+}
+
+function paintDiagram(fig, d, svg) {
+  const frame = $('.diagram__frame', fig);
+  frame.innerHTML = svg;
+  prepareSvg($('svg', frame), fig, d);
+  frame.append(diagramTools(fig, d));
+}
+
+// Bản sáng của sơ đồ dùng cho PDF / in / tải SVG, PNG — tài liệu xuất ra luôn nền sáng
+const lightSvgCache = new Map();
+async function lightSvg(index) {
+  if (!lightSvgCache.has(index)) lightSvgCache.set(index, await renderMermaid(state.diagrams[index].src, 'light'));
+  return lightSvgCache.get(index);
+}
+async function lightSvgElement(fig) {
+  const index = Number(fig.dataset.diagram);
+  const box = document.createElement('div');
+  box.innerHTML = await lightSvg(index);
+  return prepareSvg($('svg', box), fig, state.diagrams[index]);
+}
+
+// Đổi theme: vẽ lại sơ đồ tại chỗ (không dựng lại cả tài liệu để giữ vị trí cuộn)
+async function repaintDiagrams() {
+  if (!state.diagrams?.length) return;
+  const seq = state.renderSeq;
+  const theme = effectiveTheme();
+  for (const fig of $$('.diagram:not(.diagram--error)', el.docBody)) {
+    if (seq !== state.renderSeq) return;
+    const index = Number(fig.dataset.diagram);
+    try {
+      const svg = theme === 'light' ? await lightSvg(index) : await renderMermaid(state.diagrams[index].src, theme);
+      if (seq !== state.renderSeq) return;
+      paintDiagram(fig, state.diagrams[index], svg);
+    } catch { /* sơ đồ đã vẽ được ở lượt đầu, bỏ qua */ }
+  }
 }
 
 function cleanMermaidError(err) {
@@ -192,14 +337,14 @@ function diagramTools(fig, d) {
   };
   box.append(
     mk('Phóng to', () => openViewer(fig, `Hình ${no} — ${d.caption || d.typeLabel}`)),
-    mk('SVG', () => downloadBlob(new Blob([svgString(fig)], { type: 'image/svg+xml' }), `${name}.svg`)),
+    mk('SVG', async () => downloadBlob(new Blob([await svgString(fig)], { type: 'image/svg+xml' }), `${name}.svg`)),
     mk('PNG', () => exportPng(fig, `${name}.png`)),
   );
   return box;
 }
 
-function svgString(fig) {
-  const svg = $('.diagram__frame svg', fig).cloneNode(true);
+async function svgString(fig) {
+  const svg = await lightSvgElement(fig);
   svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   const vb = svg.viewBox.baseVal;
   if (vb && vb.width) {
@@ -211,9 +356,8 @@ function svgString(fig) {
 }
 
 async function exportPng(fig, name) {
-  const src = svgString(fig);
-  const svg = $('.diagram__frame svg', fig);
-  const vb = svg.viewBox.baseVal;
+  const src = await svgString(fig);
+  const vb = $('.diagram__frame svg', fig).viewBox.baseVal;
   const scale = 2.5;
   const img = new Image();
   img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(src);
@@ -377,7 +521,7 @@ function loadPasted(text) {
 
 // Dán văn bản
 function setSource(kind) {
-  $$('.segmented__item').forEach((b) => {
+  $$('.segmented__item[data-source]').forEach((b) => {
     const on = b.dataset.source === kind;
     b.classList.toggle('is-active', on);
     b.setAttribute('aria-checked', String(on));
@@ -385,7 +529,7 @@ function setSource(kind) {
   $$('[data-source-pane]').forEach((p) => { p.hidden = p.dataset.sourcePane !== kind; });
   if (kind === 'paste') el.pasteBox.focus();
 }
-$$('.segmented__item').forEach((b) => b.addEventListener('click', () => setSource(b.dataset.source)));
+$$('.segmented__item[data-source]').forEach((b) => b.addEventListener('click', () => setSource(b.dataset.source)));
 $('#btnPasteOpen').addEventListener('click', () => loadPasted(el.pasteBox.value));
 $('#btnClipboard').addEventListener('click', async () => {
   try {
@@ -448,6 +592,11 @@ el.btnPdf.addEventListener('click', async () => {
   }
   const clone = el.docBody.cloneNode(true);
   $$('.diagram__tools', clone).forEach((n) => n.remove());
+  // PDF luôn nền sáng: thay sơ đồ đang hiển thị (có thể là bản tối) bằng bản sáng
+  for (const fig of $$('.diagram:not(.diagram--error)', clone)) {
+    const frame = $('.diagram__frame', fig);
+    frame.replaceChildren(await lightSvgElement(fig));
+  }
 
   const payload = JSON.stringify({
     html: clone.innerHTML,
@@ -490,8 +639,14 @@ el.btnPdf.addEventListener('click', async () => {
 });
 
 el.btnPrint.addEventListener('click', printFallback);
-function printFallback() {
+async function printFallback() {
   activateTab('preview');
+  // Bản in luôn nền sáng: ép tạm theme sáng, in xong trả lại theme đang dùng
+  if (effectiveTheme() === 'dark') {
+    themeOverride = 'light';
+    await applyTheme();
+    window.addEventListener('afterprint', () => { themeOverride = null; applyTheme(); }, { once: true });
+  }
   setTimeout(() => window.print(), 150);
 }
 
@@ -606,3 +761,5 @@ function formatBytes(n) {
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / 1024 / 1024).toFixed(2)} MB`;
 }
+
+applyTheme();

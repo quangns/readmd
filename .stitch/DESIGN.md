@@ -25,6 +25,13 @@ Một bàn làm việc yên tĩnh, ánh sáng đều, kiểu phòng đọc bản
 
 Cấm: tím/neon, gradient, #000000, accent thứ hai.
 
+### Giao diện tối (Sáng / Tối / Hệ thống)
+- **Night Canvas** (#111113) — nền bàn làm việc · **Night Paper** (#18181B) — tờ giấy, sidebar
+- **Moon Ink** (#E4E4E7) — chữ chính · **Dim Steel** (#A1A1AA) — chữ phụ · **Night Hairline** (#2E2E33)
+- **Night Wash** (#1F1F23) — nền khung sơ đồ, khối mã
+- **Ledger Blue Light** (#6AA5E0) — accent trên nền tối (link, viền node); nút chính giữ nền #2F74BF để chữ trắng đủ tương phản
+- Sơ đồ có bảng màu tối riêng; mọi file xuất ra (PDF, in, SVG/PNG) luôn dùng bảng màu sáng
+
 ## 3. Typography Rules
 - **Display & Body:** `Be Vietnam Pro` — thiết kế riêng cho tiếng Việt, dấu thanh không bị va chạm. Display weight 700, tracking `-0.02em`, leading `1.15`. Body weight 400, leading `1.7`, độ rộng dòng tối đa ~72ch trong tờ giấy
 - **Mono:** `JetBrains Mono` — khối mã, mã nguồn sơ đồ, tên file, kích thước file, số trang
