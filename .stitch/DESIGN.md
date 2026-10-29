@@ -52,7 +52,7 @@ Cấm: tím/neon, gradient, #000000, accent thứ hai.
 ## 5. Layout Principles
 - CSS Grid: `grid-template-columns: 320px minmax(0, 1fr)` (sidebar trái cố định, sticky)
 - Thanh trên mỏng 56px: tên sản phẩm, tên file đang mở, nút tải PDF / TXT
-- Vùng tài liệu: tờ giấy trải theo cột phải, `max-width: 1180px`, cách mép vùng làm việc 20px
+- Vùng tài liệu: tờ giấy trải hết cột phải (không giới hạn bề rộng), cách mép vùng làm việc 20px. Sequence diagram tự giãn khoảng cách cột cho vừa khung (chỉ trên web; PDF dùng bản gốc)
 - Sidebar chia các nhóm bằng `border-top` Hairline (không dùng card lồng card): Nguồn tài liệu → Mục lục → Tuỳ chọn xuất
 - `min-height: 100dvh`, không dùng `100vh`
 

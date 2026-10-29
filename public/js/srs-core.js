@@ -389,11 +389,13 @@ function processSequence({ nodes, edges, boxes, front }) {
   const live = edges.filter((e) => e.from !== e.to);
   const outs = (id) => live.filter((e) => e.from === id);
 
-  // Cột thực hiện và nội dung bước của một node
+  // Cột thực hiện và nội dung bước của một node.
+  // Bỏ số thứ tự viết tay ở đầu nhãn ("1. Lấy token") vì sơ đồ đã tự đánh số bước
   const info = (n) => {
-    const sub = matchSubject(n.label);
+    const label = n.label.replace(/^\s*(?:bước\s*)?\d+(?:\.\d+)*[.):]\s+/i, '') || n.label;
+    const sub = matchSubject(label);
     let lane;
-    let action = n.label;
+    let action = label;
     if (n.box >= 0 && boxes[n.box]) {
       lane = boxes[n.box].title;
       if (sub && laneKey(sub.name) === laneKey(lane)) action = sub.rest;
@@ -401,7 +403,7 @@ function processSequence({ nodes, edges, boxes, front }) {
       lane = sub.name;
       action = sub.rest;
     } else lane = DEFAULT_LANE;
-    return { lane, action: capFirst(action || n.label) };
+    return { lane, action: capFirst(action || label) };
   };
 
   const visited = new Set();
@@ -472,7 +474,7 @@ function processSequence({ nodes, edges, boxes, front }) {
         const join = findJoin(o.map((e) => e.to), stopAt);
         let main = null;
         let side = o;
-        if (!join) {
+        if (!join && dec) {
           // Không gộp lại: nhánh đi xa nhất là luồng chính, các nhánh còn lại là ngoại lệ
           const sizes = o.map((e) => reach(e.to, stopAt).length);
           const max = Math.max(...sizes);

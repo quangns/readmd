@@ -283,6 +283,7 @@ async function render() {
       if (seq !== state.renderSeq) return;
       if (theme === 'light') lightSvgCache.set(cacheKey(index), svg);
       paintDiagram(fig, d, svg);
+      await fitSequenceWidth(fig, d, theme);
     } catch (err) {
       if (seq !== state.renderSeq) return;
       errors++;
@@ -292,6 +293,7 @@ async function render() {
     }
   }
   state.diagramErrors = errors;
+  lastFrameWidth = $('.diagram__frame', el.docBody)?.clientWidth || 0;
   setStatus(`${headings.length} mục · ${diagrams.length} sơ đồ${errors ? ` · ${errors} sơ đồ lỗi` : ''}`, errors > 0);
 }
 
@@ -326,6 +328,66 @@ function paintDiagram(fig, d, svg) {
   frame.append(diagramTools(fig, d));
 }
 
+// ---------- Giãn sequence diagram cho vừa khung ----------
+// Sequence hẹp hơn khung thì vẽ lại với khoảng cách cột lớn hơn để trải hết bề ngang, cỡ chữ giữ nguyên.
+// Chỉ áp dụng cho bản xem trên web; PDF / ảnh dùng bản gốc (vừa khổ A4).
+const SEQ_DEFAULT_MARGIN = MERMAID_BASE.sequence.actorMargin;
+const INIT_RE = /%%\{\s*init\s*:\s*(\{.*\})\s*\}%%/;
+function widenSequenceSrc(src, extra) {
+  const m = src.match(INIT_RE);
+  if (m) {
+    let cfg;
+    try { cfg = JSON.parse(m[1]); } catch { return null; } // directive viết tay không phải JSON chuẩn: bỏ qua
+    cfg.sequence = { ...cfg.sequence };
+    cfg.sequence.actorMargin = Math.round((cfg.sequence.actorMargin ?? SEQ_DEFAULT_MARGIN) + extra);
+    return src.replace(INIT_RE, `%%{init: ${JSON.stringify(cfg)}}%%`);
+  }
+  if (src.includes('%%{')) return null;
+  const init = JSON.stringify({ sequence: { actorMargin: Math.round(SEQ_DEFAULT_MARGIN + extra) } });
+  return src.replace(/^(\s*sequenceDiagram)/m, `%%{init: ${init}}%%\n$1`);
+}
+
+async function fitSequenceWidth(fig, d, theme) {
+  const frame = $('.diagram__frame', fig);
+  const svg = $('svg', frame);
+  if (!svg || svg.getAttribute('aria-roledescription') !== 'sequence') return;
+  const natural = svg.viewBox.baseVal?.width;
+  const cs = getComputedStyle(frame);
+  const avail = frame.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 4;
+  const actors = svg.querySelectorAll('.actor-top').length;
+  if (!natural || actors < 2 || natural >= avail * 0.92) return;
+  let extra = (avail - natural) / (actors - 1);
+  try {
+    let wide = null;
+    // Nhãn dài có thể làm một số khoảng cột tự nới thêm -> thử lại 1 lần nếu vượt khung
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const src = widenSequenceSrc(diagramSrc(d), extra);
+      if (!src) return;
+      const svgText = await renderMermaid(src, theme);
+      const w = Number(svgText.match(/viewBox="[\d.\-]+ [\d.\-]+ ([\d.]+)/)?.[1]);
+      wide = svgText;
+      if (!w || w <= avail * 1.02) break;
+      extra = Math.max(0, extra - (w - avail) / (actors - 1));
+    }
+    if (!fig.isConnected || $('svg', frame) !== svg) return; // đã được vẽ lại trong lúc chờ
+    paintDiagram(fig, d, wide);
+  } catch { /* giữ bản gốc */ }
+}
+
+// Đổi kích thước cửa sổ: tính lại độ giãn của sơ đồ
+let resizeTimer;
+let lastFrameWidth = 0;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    const frame = $('.diagram__frame', el.docBody);
+    if (!frame || el.doc.hidden) return;
+    if (Math.abs(frame.clientWidth - lastFrameWidth) < 40) return;
+    lastFrameWidth = frame.clientWidth;
+    repaintDiagrams();
+  }, 300);
+});
+
 // Bản sáng của sơ đồ dùng cho PDF / in / tải SVG, PNG — tài liệu xuất ra luôn nền sáng
 const lightSvgCache = new Map();
 const cacheKey = (index) => `${index}:${state.diagrams[index].view}`;
@@ -356,6 +418,7 @@ async function repaintDiagrams(figs = $$('.diagram:not(.diagram--error)', el.doc
       const svg = theme === 'light' ? await lightSvg(index) : await renderDiagramSvg(state.diagrams[index], theme);
       if (seq !== state.renderSeq) return;
       paintDiagram(fig, state.diagrams[index], svg);
+      await fitSequenceWidth(fig, state.diagrams[index], theme);
     } catch { /* sơ đồ đã vẽ được ở lượt đầu, bỏ qua */ }
   }
 }

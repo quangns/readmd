@@ -273,8 +273,8 @@ select {
 .pane.is-active { display: block; animation: fade 200ms var(--ease); }
 
 .paper {
-  /* Tờ giấy trải theo bề rộng vùng làm việc (tối đa 1180px), lề trong co giãn theo màn hình */
-  max-width: 1180px;
+  /* Tờ giấy trải hết bề rộng vùng làm việc, lề trong co giãn theo màn hình */
+  max-width: none;
   margin: 0 auto;
   background: var(--paper);
   border: 1px solid var(--line);
@@ -319,7 +319,7 @@ select {
 .diagram__tools .btn { min-height: 28px; padding: 0 0.6rem; font-size: 0.75rem; }
 
 /* Trình soạn thảo */
-.editor { max-width: 1180px; margin: 0 auto; }
+.editor { max-width: none; margin: 0 auto; }
 .editor__hint { margin: 0 0 0.75rem; font-size: 0.8125rem; color: var(--ink-2); }
 .editor textarea {
   width: 100%;
