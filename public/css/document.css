@@ -160,6 +160,9 @@ body.pdf .doc { font-size: 10.5pt; }
   .doc .diagram__frame { padding: 0.8rem; }
   .doc .diagram__frame svg { max-width: 100% !important; max-height: 225mm; }
   body.pdf.landscape .doc .diagram__frame svg { max-height: 150mm; }
+  /* PDF: sơ đồ đã được tính đúng kích thước theo vùng in (app.js pdfSvgElement) -> giữ nguyên tỉ lệ,
+     không để trình duyệt kéo hộp SVG rộng 100% rồi thu hình vào giữa (tạo dải trống hai bên) */
+  body.pdf .doc .diagram__frame svg[width][height] { max-height: none; }
   .doc a { color: var(--ink); }
   .doc .diagram__tools { display: none !important; }
   .doc p, .doc li { orphans: 3; widows: 3; }
