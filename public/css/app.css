@@ -248,13 +248,13 @@ select {
 .panel__hint code { font-size: 0.72rem; }
 
 /* Vùng làm việc */
-.workspace { min-width: 0; padding: 0 2rem 4rem; }
+.workspace { min-width: 0; padding: 0 1.25rem 3rem; }
 .tabs {
   position: sticky; top: var(--topbar-h); z-index: 10;
   display: flex; align-items: center; gap: 1.5rem;
   background: var(--canvas);
   border-bottom: 1px solid var(--line);
-  margin: 0 -2rem 2rem; padding: 0 2rem;
+  margin: 0 -1.25rem 1.5rem; padding: 0 1.25rem;
 }
 .tab {
   font: inherit; font-size: 0.875rem; font-weight: 500;
@@ -273,13 +273,14 @@ select {
 .pane.is-active { display: block; animation: fade 200ms var(--ease); }
 
 .paper {
-  max-width: 880px;
+  /* Tờ giấy trải theo bề rộng vùng làm việc (tối đa 1180px), lề trong co giãn theo màn hình */
+  max-width: 1180px;
   margin: 0 auto;
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 0.75rem;
   box-shadow: 0 24px 48px -24px var(--shadow);
-  padding: 3.5rem 4rem;
+  padding: 2.5rem clamp(1.25rem, 3vw, 3rem);
   min-height: 60dvh;
 }
 .paper--text { padding: 2rem 2.25rem; }
@@ -318,7 +319,7 @@ select {
 .diagram__tools .btn { min-height: 28px; padding: 0 0.6rem; font-size: 0.75rem; }
 
 /* Trình soạn thảo */
-.editor { max-width: 980px; margin: 0 auto; }
+.editor { max-width: 1180px; margin: 0 auto; }
 .editor__hint { margin: 0 0 0.75rem; font-size: 0.8125rem; color: var(--ink-2); }
 .editor textarea {
   width: 100%;
@@ -496,7 +497,7 @@ html[data-theme='dark'] .hljs-deletion { color: #FFDCD7; background-color: #6706
   .panel--grow { max-height: 55dvh; }
   .workspace { padding: 0 1rem 3rem; }
   .tabs { margin: 0 -1rem 1.25rem; padding: 0 1rem; gap: 1rem; }
-  .paper { padding: 2rem 1.75rem; }
+  .paper { padding: 1.75rem 1.25rem; }
   .diagram__tools { opacity: 1; transform: none; }
 }
 @media (max-width: 640px) {
@@ -512,7 +513,9 @@ html[data-theme='dark'] .hljs-deletion { color: #FFDCD7; background-color: #6706
   .tabs { position: static; overflow-x: auto; scrollbar-width: none; }
   .tab { white-space: nowrap; flex: none; }
   .tabs__status { display: none; }
-  .paper { padding: 1.25rem; border-radius: 0.5rem; }
+  .workspace { padding: 0 0.5rem 2rem; }
+  .tabs { margin: 0 -0.5rem 1rem; padding: 0 0.5rem; }
+  .paper { padding: 1.25rem 1rem; border-radius: 0.5rem; }
   .empty { grid-template-columns: minmax(0, 1fr); gap: 2rem; }
   .empty__aside { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 1.5rem; }
   .empty__actions .btn { flex: 1 1 100%; min-height: 44px; }

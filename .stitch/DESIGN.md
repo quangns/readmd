@@ -41,7 +41,7 @@ Cấm: tím/neon, gradient, #000000, accent thứ hai.
 ## 4. Component Stylings
 * **Buttons:** Phẳng, bo `0.625rem`. Primary: nền Ledger Blue, chữ trắng. Secondary: viền Hairline, nền trắng. Active: `translateY(1px)`. Hover: đổi nền nhẹ, không glow. Cao tối thiểu 40px (44px trên mobile)
 * **Dropzone:** Viền nét đứt Hairline, bo `1rem`. Khi kéo file vào: viền chuyển Ledger Blue, nền Ledger Blue Tint
-* **Paper (tờ giấy):** Nền trắng, bo `0.75rem`, viền Hairline, bóng `0 24px 48px -24px rgba(24,24,27,0.18)`. Padding `3.5rem 4rem` desktop, `1.25rem` mobile
+* **Paper (tờ giấy):** Nền trắng, bo `0.75rem`, viền Hairline, bóng `0 24px 48px -24px rgba(24,24,27,0.18)`. Padding `2.5rem clamp(1.25rem, 3vw, 3rem)` desktop, `1.25rem 1rem` mobile
 * **Diagram Frame:** Nền Diagram Wash, viền Hairline, bo `0.75rem`. Thanh công cụ nhỏ góc phải trên (hiện khi hover, luôn hiện trên mobile). Chú thích "Hình n — Tên" dưới khung, chữ Steel Secondary, nhãn "Hình n" mono
 * **Tables:** Viền Hairline, header nền Diagram Wash, chữ header weight 600. Dòng chẵn không tô màu — dùng đường kẻ
 * **Tabs:** Gạch chân 2px Ledger Blue cho tab đang chọn, không dùng pill
@@ -52,7 +52,7 @@ Cấm: tím/neon, gradient, #000000, accent thứ hai.
 ## 5. Layout Principles
 - CSS Grid: `grid-template-columns: 320px minmax(0, 1fr)` (sidebar trái cố định, sticky)
 - Thanh trên mỏng 56px: tên sản phẩm, tên file đang mở, nút tải PDF / TXT
-- Vùng tài liệu: tờ giấy `max-width: 880px`, căn giữa trong cột phải
+- Vùng tài liệu: tờ giấy trải theo cột phải, `max-width: 1180px`, cách mép vùng làm việc 20px
 - Sidebar chia các nhóm bằng `border-top` Hairline (không dùng card lồng card): Nguồn tài liệu → Mục lục → Tuỳ chọn xuất
 - `min-height: 100dvh`, không dùng `100vh`
 
