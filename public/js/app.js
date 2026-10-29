@@ -14,6 +14,7 @@ const el = {
   empty: $('#empty'), skeleton: $('#skeleton'), doc: $('#doc'), docBody: $('#docBody'),
   rawView: $('#rawView'), optWrap: $('#optWrap'),
   editor: $('#editor'), txtPreview: $('#txtPreview'), status: $('#status'),
+  dropOverlay: $('#dropOverlay'),
   viewer: $('#viewer'), viewerStage: $('#viewerStage'), viewerTitle: $('#viewerTitle'), viewerZoom: $('#viewerZoom'),
   toast: $('#toast'),
 };
@@ -547,28 +548,51 @@ el.fileInput.addEventListener('change', () => {
   el.fileInput.value = '';
 });
 
-// Kéo thả: cả dropzone lẫn toàn bộ cửa sổ
+// Kéo thả file vào bất kỳ vị trí nào trên trang: lớp phủ toàn trang báo vùng thả,
+// bắt sự kiện ở pha capture để ô soạn thảo / ô dán không chèn đường dẫn file vào nội dung
+const MD_FILE_RE = /\.(md|markdown|mdown|mkd|txt)$/i;
+const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
 let dragDepth = 0;
+function setDropActive(on) {
+  el.dropOverlay.hidden = !on;
+  el.dropzone.classList.toggle('is-over', on);
+  document.body.classList.toggle('is-dragging', on);
+}
 window.addEventListener('dragenter', (e) => {
-  if (!e.dataTransfer?.types.includes('Files')) return;
-  dragDepth++;
-  el.dropzone.classList.add('is-over');
-});
-window.addEventListener('dragleave', () => {
-  if (--dragDepth <= 0) { dragDepth = 0; el.dropzone.classList.remove('is-over'); }
-});
-window.addEventListener('dragover', (e) => e.preventDefault());
-window.addEventListener('drop', (e) => {
+  if (!hasFiles(e)) return;
   e.preventDefault();
-  dragDepth = 0;
-  el.dropzone.classList.remove('is-over');
-  const file = e.dataTransfer?.files?.[0];
-  if (file) readFile(file);
-  else {
+  if (++dragDepth === 1) setDropActive(true);
+}, true);
+window.addEventListener('dragleave', (e) => {
+  if (!hasFiles(e)) return;
+  if (--dragDepth <= 0) { dragDepth = 0; setDropActive(false); }
+}, true);
+window.addEventListener('dragover', (e) => {
+  if (!hasFiles(e)) return; // kéo chữ trong ô nhập: để trình duyệt xử lý bình thường
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+}, true);
+window.addEventListener('drop', (e) => {
+  if (!hasFiles(e)) {
+    // Kéo chữ từ nơi khác vào vùng tài liệu (không phải ô nhập) -> mở như nội dung dán
+    if (e.target.closest?.('textarea, input, [contenteditable]')) return;
     const text = e.dataTransfer?.getData('text/plain');
-    if (text) loadPasted(text);
+    if (text?.trim()) { e.preventDefault(); loadPasted(text); }
+    return;
   }
-});
+  e.preventDefault();
+  e.stopPropagation();
+  dragDepth = 0;
+  setDropActive(false);
+  const files = Array.from(e.dataTransfer.files);
+  const file = files.find((f) => MD_FILE_RE.test(f.name)) || files[0];
+  if (!file) return;
+  if (el.viewer.open) el.viewer.close();
+  if (files.length > 1) toast(`Đã thả ${files.length} file — mở ${file.name}.`);
+  readFile(file);
+}, true);
+// Kéo ra khỏi cửa sổ trình duyệt mà không thả
+window.addEventListener('dragend', () => { dragDepth = 0; setDropActive(false); });
 
 function loadPasted(text) {
   if (!text.trim()) return toast('Nội dung trống.', true);

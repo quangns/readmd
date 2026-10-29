@@ -363,6 +363,36 @@ select {
 }
 .toast.is-error { background: var(--rose); }
 
+/* Lớp phủ khi kéo file vào trang — không chặn chuột để sự kiện kéo thả đi tới phần tử bên dưới */
+.drop-overlay {
+  position: fixed; inset: 0; z-index: 60;
+  display: grid; place-items: center;
+  padding: 1.25rem;
+  background: color-mix(in srgb, var(--canvas) 72%, transparent);
+  pointer-events: none;
+  animation: fade 140ms var(--ease);
+}
+.drop-overlay::before {
+  content: '';
+  position: absolute; inset: 0.75rem;
+  border: 2px dashed var(--accent);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--accent-tint) 55%, transparent);
+}
+.drop-overlay__box {
+  position: relative;
+  display: grid; gap: 0.35rem; justify-items: center;
+  padding: 1.5rem 2rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 0.875rem;
+  box-shadow: 0 24px 48px -24px var(--shadow);
+  animation: rise 180ms var(--ease);
+}
+.drop-overlay__title { font-weight: 700; font-size: 1.125rem; letter-spacing: -0.01em; }
+.drop-overlay__sub { font-size: 0.8125rem; color: var(--ink-2); }
+body.is-dragging .viewer { pointer-events: none; }
+
 /* ---------- Giao diện tối ---------- */
 html[data-theme='dark'] {
   color-scheme: dark;

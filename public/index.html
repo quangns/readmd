@@ -51,8 +51,8 @@
         <div data-source-pane="file">
           <label class="dropzone" id="dropzone">
             <input type="file" id="fileInput" accept=".md,.markdown,.mdown,.mkd,.txt,text/markdown,text/plain">
-            <span class="dropzone__main">Kéo thả file <code>.md</code> vào đây</span>
-            <span class="dropzone__sub">hoặc bấm để chọn file từ máy</span>
+            <span class="dropzone__main">Chọn file <code>.md</code> từ máy</span>
+            <span class="dropzone__sub">hoặc kéo thả file vào bất kỳ đâu trên trang</span>
           </label>
         </div>
         <div data-source-pane="paste" hidden>
@@ -109,7 +109,7 @@
           <div class="empty" id="empty">
             <div class="empty__lead">
               <h1 class="empty__title">Đọc tài liệu SRS viết bằng Markdown, xuất ra PDF hoặc TXT.</h1>
-              <p class="empty__text">Import file <code>.md</code> hoặc dán nội dung (Ctrl+V ngay tại đây). Đọc trực tiếp không cần chuyển đổi; khi cần mới tải PDF hoặc TXT. Sơ đồ Mermaid được vẽ dạng vector, đánh số hình, giữ nguyên độ nét khi in.</p>
+              <p class="empty__text">Kéo thả file <code>.md</code> vào bất kỳ đâu trên trang, chọn file, hoặc dán nội dung (Ctrl+V ngay tại đây). Đọc trực tiếp không cần chuyển đổi; khi cần mới tải PDF hoặc TXT. Sơ đồ Mermaid được vẽ dạng vector, đánh số hình, giữ nguyên độ nét khi in.</p>
               <div class="empty__actions">
                 <button class="btn btn--primary" id="btnEmptyOpen">Chọn file Markdown</button>
                 <button class="btn btn--ghost" id="btnEmptyPaste">Dán văn bản</button>
@@ -184,6 +184,13 @@
     </div>
     <div class="viewer__stage" id="viewerStage"></div>
   </dialog>
+
+  <div class="drop-overlay" id="dropOverlay" hidden aria-hidden="true">
+    <div class="drop-overlay__box">
+      <span class="drop-overlay__title">Thả file để mở</span>
+      <span class="drop-overlay__sub">Hỗ trợ <code>.md</code>, <code>.markdown</code>, <code>.txt</code></span>
+    </div>
+  </div>
 
   <div class="toast" id="toast" role="status" hidden></div>
 

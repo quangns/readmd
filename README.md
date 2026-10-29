@@ -8,7 +8,7 @@ Giao diện thiết kế theo skill `taste-design` của [google-labs-code/stitc
 
 | Nhóm | Chi tiết |
 |------|----------|
-| Nhập tài liệu | Import file `.md` (chọn file / kéo thả), dán văn bản vào ô dán, nút "Lấy từ clipboard", hoặc Ctrl+V ở bất kỳ đâu trên trang |
+| Nhập tài liệu | Import file `.md` (chọn file, hoặc kéo thả vào **bất kỳ đâu trên trang**), dán văn bản vào ô dán, nút "Lấy từ clipboard", hoặc Ctrl+V ở bất kỳ đâu trên trang |
 | Đọc không chuyển đổi | Tab **Đọc** (Markdown đã định dạng), tab **Markdown gốc** (nguyên văn, có số dòng, sao chép, tải `.md`), tab **Soạn / Dán** (sửa trực tiếp, xem trước cập nhật ngay) |
 | Sơ đồ | Mermaid: flowchart, sequence, class, ER, state, gantt, journey, pie, mindmap, timeline… Mỗi sơ đồ có: phóng to (zoom / kéo), tải SVG, tải PNG. Sơ đồ sai cú pháp báo lỗi ngay tại chỗ |
 | PDF | Render bằng Chromium phía server → chữ chọn được, sơ đồ vector. Tuỳ chọn A4/Letter, dọc/ngang, trang bìa, trang mục lục, đầu trang + "Trang X / Y", bookmark PDF |
