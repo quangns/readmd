@@ -1319,6 +1319,32 @@ const T2J_SAMPLE = `// Request
 // Response
 { "accessToken": "eyJhbGciOiJIUzI1NiIs...", "refreshToken": "refresh_token_string", "userId": "user_id_string" }`;
 
+// Key dài (vd. cả dòng log làm key): đưa dấu mở { / [ của giá trị xuống dòng mới, lùi thêm 1 cấp
+const JSON_LONG_KEY = 40;
+const breakAfterKey = (key, v) =>
+  typeof key === 'string' && JSON.stringify(key).length > JSON_LONG_KEY &&
+  v !== null && typeof v === 'object' && Object.keys(v).length > 0;
+// Như JSON.stringify(value, null, ind) nhưng áp dụng quy tắc key dài ở trên (vẫn là JSON hợp lệ)
+function prettyJson(value, ind) {
+  if (!ind) return JSON.stringify(value);
+  const unit = typeof ind === 'number' ? ' '.repeat(ind) : ind;
+  const ser = (x, pad) => {
+    if (x === null || typeof x !== 'object') return JSON.stringify(x) ?? 'null';
+    const isArr = Array.isArray(x);
+    const entries = isArr ? x.map((y, i) => [i, y]) : Object.entries(x).filter(([, y]) => y !== undefined);
+    if (!entries.length) return isArr ? '[]' : '{}';
+    const inner = pad + unit;
+    const lines = entries.map(([k, y]) => {
+      if (isArr) return inner + ser(y, inner);
+      const kq = JSON.stringify(k);
+      if (breakAfterKey(k, y)) return `${inner}${kq}:\n${inner}${unit}${ser(y, inner + unit)}`;
+      return `${inner}${kq}: ${ser(y, inner)}`;
+    });
+    return `${isArr ? '[' : '{'}\n${lines.join(',\n')}\n${pad}${isArr ? ']' : '}'}`;
+  };
+  return ser(value, '');
+}
+
 function runT2j() {
   const text = t2j.input.value;
   t2j.json = '';
@@ -1333,7 +1359,7 @@ function runT2j() {
     try {
       const { value, format } = convertToJson(text, { format: t2j.format.value, typed: t2j.typed.checked });
       const ind = t2j.indent.value === 'tab' ? '\t' : Number(t2j.indent.value);
-      t2j.json = JSON.stringify(value, null, ind);
+      t2j.json = prettyJson(value, ind);
       t2j.value = value;
       if (ind === 0 || !value || typeof value !== 'object') {
         // Thu gọn 1 dòng / giá trị đơn: hiện dạng văn bản
@@ -1374,9 +1400,10 @@ function renderJsonTree(value, indent) {
     return h('span', 'hljs-string', JSON.stringify(v));
   };
   const pathText = (path) => '$' + path.map((p) => (typeof p === 'number' ? `[${p}]` : /^[\p{L}_$][\p{L}\p{N}_$]*$/u.test(p) ? `.${p}` : `[${JSON.stringify(p)}]`)).join('');
-  const build = (v, key, path, depth, last) => {
+  // depth: cấp logic (thu gọn theo cấp); lvl: cấp thụt lề hiển thị (lớn hơn depth khi có key dài xuống dòng)
+  const build = (v, key, path, depth, last, lvl = depth) => {
     if (++count > JT_MAX_NODES) throw new Error('too-big');
-    const pad = `${depth * indent}ch`;
+    let pad = `${lvl * indent}ch`;
     const comma = last ? '' : ',';
     const keyEls = () => (key === undefined ? [] : [h('span', 'hljs-attr', typeof key === 'number' ? '' : JSON.stringify(key)), h('span', null, typeof key === 'number' ? '' : ': ')]);
     if (!v || typeof v !== 'object') {
@@ -1392,6 +1419,17 @@ function renderJsonTree(value, indent) {
     node.dataset.depth = depth;
     node._path = path;
     node._value = v;
+    if (breakAfterKey(key, v)) {
+      // Dòng riêng cho key dài, dấu mở xuống dòng dưới và lùi thêm 1 cấp
+      const keyLine = h('div', 'jt-line jt-keyline');
+      keyLine.dataset.ln = ++ln;
+      keyLine.style.paddingLeft = pad;
+      keyLine.append(h('span', 'hljs-attr', JSON.stringify(key)), h('span', null, ':'));
+      node.append(keyLine);
+      key = undefined;
+      lvl++;
+      pad = `${lvl * indent}ch`;
+    }
     const line = h('div', 'jt-line');
     line.dataset.ln = ++ln;
     line.style.paddingLeft = pad;
@@ -1413,7 +1451,7 @@ function renderJsonTree(value, indent) {
     actions.append(focusBtn, copyBtn);
     line.append(tog, ...keyEls(), open, summary, openComma, countEl, actions);
     const children = h('div', 'jt-children');
-    entries.forEach(([k, x], idx) => children.append(build(x, isArr ? idx : k, [...path, k], depth + 1, idx === entries.length - 1)));
+    entries.forEach(([k, x], idx) => children.append(build(x, isArr ? idx : k, [...path, k], depth + 1, idx === entries.length - 1, lvl + 1)));
     const close = h('div', 'jt-line jt-close', `${isArr ? ']' : '}'}${comma}`);
     close.dataset.ln = ++ln;
     close.style.paddingLeft = pad;
@@ -1473,7 +1511,7 @@ t2j.output.addEventListener('click', async (e) => {
   if (act === 'copy') {
     const ind = t2j.indent.value === 'tab' ? '\t' : Number(t2j.indent.value);
     try {
-      await navigator.clipboard.writeText(JSON.stringify(node._value, null, ind));
+      await navigator.clipboard.writeText(prettyJson(node._value, ind));
       toast('Đã sao chép phần tử.');
     } catch {
       toast('Trình duyệt không cho phép sao chép.', true);
