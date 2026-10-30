@@ -11,6 +11,9 @@
       var m = localStorage.getItem('convertsrs-theme');
       var dark = m === 'dark' || (m !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
       document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      // Ứng dụng mở theo đường dẫn (#json, #crypto), mặc định convertSRS — gán trước khi vẽ để không nháy
+      var app = location.hash.slice(1);
+      document.documentElement.dataset.app = app === 'json' || app === 'crypto' ? app : 'srs';
     })();
   </script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -25,6 +28,11 @@
       <span class="brand__mark" aria-hidden="true"></span>
       <span class="brand__name">convertSRS</span>
     </div>
+    <nav class="appnav" aria-label="Ứng dụng">
+      <a class="appnav__item is-active" href="#" data-app="srs" aria-current="page">convertSRS</a>
+      <a class="appnav__item" href="#json" data-app="json">Text → JSON</a>
+      <a class="appnav__item" href="#crypto" data-app="crypto">Mã hoá / Base64</a>
+    </nav>
     <div class="topbar__file" id="fileLabel" hidden>
       <span class="topbar__file-name" id="fileName"></span>
       <span class="topbar__file-meta" id="fileMeta"></span>
@@ -121,8 +129,6 @@
         <button class="tab" role="tab" data-tab="raw" aria-selected="false">Markdown gốc</button>
         <button class="tab" role="tab" data-tab="source" aria-selected="false">Soạn / Dán</button>
         <button class="tab" role="tab" data-tab="text" aria-selected="false">Bản TXT</button>
-        <button class="tab" role="tab" data-tab="json" aria-selected="false">Text → JSON</button>
-        <button class="tab" role="tab" data-tab="crypto" aria-selected="false">Mã hoá / Base64</button>
         <span class="tabs__status" id="status" aria-live="polite"></span>
       </div>
 

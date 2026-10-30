@@ -870,7 +870,7 @@ window.addEventListener('drop', (e) => {
   if (!file) return;
   if (el.viewer.open) el.viewer.close();
   // Đang ở tab Mã hoá: file thả vào là dữ liệu cần băm / mã hoá, không phải tài liệu
-  if ($('.pane[data-pane="crypto"]').classList.contains('is-active')) return loadCryptoFile(files[0]);
+  if (document.documentElement.dataset.app === 'crypto') return loadCryptoFile(files[0]);
   if (files.length > 1) toast(`Đã thả ${files.length} file — mở ${file.name}.`);
   readFile(file);
 }, true);
@@ -922,6 +922,7 @@ $('#btnClipboard').addEventListener('click', async () => {
 // Ctrl+V ở bất kỳ đâu ngoài ô nhập liệu
 document.addEventListener('paste', (e) => {
   if (e.target.closest('textarea, input, [contenteditable]')) return;
+  if (document.documentElement.dataset.app !== 'srs') return;
   const text = e.clipboardData?.getData('text/plain');
   if (text && text.trim()) {
     e.preventDefault();
@@ -1133,14 +1134,45 @@ el.viewerStage.addEventListener('pointermove', (e) => {
 el.viewerStage.addEventListener('pointerup', () => { pan = null; el.viewerStage.classList.remove('is-panning'); });
 
 // ---------- Tabs & trạng thái ----------
+// ---------- Ứng dụng: convertSRS / Text → JSON / Mã hoá ----------
+// Menu trên cùng chọn ứng dụng; convertSRS có các tab con Đọc / Markdown gốc / Soạn / Bản TXT.
+// Đường dẫn #json, #crypto mở thẳng ứng dụng tương ứng; mặc định là convertSRS.
+const APPS = ['srs', 'json', 'crypto'];
+let srsTab = 'preview';
+function setApp(app, { updateHash = true } = {}) {
+  if (!APPS.includes(app)) app = 'srs';
+  document.documentElement.dataset.app = app;
+  $$('.appnav__item').forEach((a) => {
+    const on = a.dataset.app === app;
+    a.classList.toggle('is-active', on);
+    if (on) a.setAttribute('aria-current', 'page');
+    else a.removeAttribute('aria-current');
+  });
+  const pane = app === 'srs' ? srsTab : app;
+  $$('.pane').forEach((p) => p.classList.toggle('is-active', p.dataset.pane === pane));
+  if (updateHash) {
+    const hash = app === 'srs' ? '' : `#${app}`;
+    if (location.hash !== hash) history.replaceState(null, '', hash || location.pathname + location.search);
+  }
+  if (app !== 'srs') window.scrollTo(0, 0);
+}
 function activateTab(name) {
+  // "json" / "crypto" là ứng dụng riêng; các tab còn lại thuộc convertSRS
+  if (APPS.includes(name) && name !== 'srs') return setApp(name);
+  srsTab = name;
   $$('.tab').forEach((t) => {
     const on = t.dataset.tab === name;
     t.classList.toggle('is-active', on);
     t.setAttribute('aria-selected', String(on));
   });
-  $$('.pane').forEach((p) => p.classList.toggle('is-active', p.dataset.pane === name));
+  setApp('srs');
 }
+$$('.appnav__item').forEach((a) => a.addEventListener('click', (e) => {
+  e.preventDefault();
+  setApp(a.dataset.app);
+}));
+window.addEventListener('hashchange', () => setApp(location.hash.slice(1) || 'srs', { updateHash: false }));
+setApp(location.hash.slice(1) || 'srs', { updateHash: false });
 $$('.tab').forEach((t) => t.addEventListener('click', () => {
   activateTab(t.dataset.tab);
   if (t.dataset.tab === 'source') el.editor.focus();

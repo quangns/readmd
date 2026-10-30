@@ -6,6 +6,8 @@ Giao diện thiết kế theo skill `taste-design` của [google-labs-code/stitc
 
 ## Tính năng
 
+Thanh menu trên cùng có 3 ứng dụng: **convertSRS** (mặc định — đọc tài liệu, sidebar mục lục, các tab Đọc / Markdown gốc / Soạn / Bản TXT), **Text → JSON** và **Mã hoá / Base64** (toàn màn hình). Mở thẳng bằng đường dẫn `#json`, `#crypto`.
+
 | Nhóm | Chi tiết |
 |------|----------|
 | Nhập tài liệu | Import file `.md` (chọn file, hoặc kéo thả vào **bất kỳ đâu trên trang**), dán văn bản vào ô dán, nút "Lấy từ clipboard", hoặc Ctrl+V ở bất kỳ đâu trên trang |
