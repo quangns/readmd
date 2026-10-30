@@ -234,7 +234,21 @@
                   <button class="btn btn--primary btn--sm" id="t2jDownload" disabled>Tải .json</button>
                 </div>
               </div>
-              <pre class="t2j__output" id="t2jOutput"><span class="muted">Kết quả hiện ở đây.</span></pre>
+              <div class="t2j__out">
+                <div class="jt-bar" id="jtBar" hidden>
+                  <button class="btn btn--text btn--xs" id="jtExpand">Mở hết</button>
+                  <button class="btn btn--text btn--xs" id="jtCollapse">Thu gọn hết</button>
+                  <label class="jt-level">Mở tới cấp
+                    <select id="jtLevel"><option value="">—</option><option>1</option><option>2</option><option>3</option><option>4</option></select>
+                  </label>
+                  <span class="jt-focus" id="jtFocus" hidden>
+                    <span class="jt-focus__label">Đang tập trung:</span>
+                    <code class="jt-focus__path" id="jtFocusPath"></code>
+                    <button class="btn btn--text btn--xs" id="jtUnfocus">Bỏ tập trung</button>
+                  </span>
+                </div>
+                <pre class="t2j__output" id="t2jOutput"><span class="muted">Kết quả hiện ở đây.</span></pre>
+              </div>
             </div>
           </div>
         </div>

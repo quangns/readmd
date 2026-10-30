@@ -1197,6 +1197,7 @@ function runT2j() {
   t2j.json = '';
   t2j.output.classList.remove('is-error');
   t2j.status.classList.remove('is-error');
+  $('#jtBar').hidden = true;
   if (!text.trim()) {
     t2j.output.innerHTML = '<span class="muted">Kết quả hiện ở đây.</span>';
     t2j.status.textContent = '';
@@ -1205,7 +1206,14 @@ function runT2j() {
       const { value, format } = convertToJson(text, { format: t2j.format.value, typed: t2j.typed.checked });
       const ind = t2j.indent.value === 'tab' ? '\t' : Number(t2j.indent.value);
       t2j.json = JSON.stringify(value, null, ind);
-      t2j.output.innerHTML = hljs.highlight(t2j.json, { language: 'json' }).value;
+      t2j.value = value;
+      if (ind === 0 || !value || typeof value !== 'object') {
+        // Thu gọn 1 dòng / giá trị đơn: hiện dạng văn bản
+        t2j.output.innerHTML = hljs.highlight(t2j.json, { language: 'json' }).value;
+        $('#jtBar').hidden = true;
+      } else {
+        renderJsonTree(value, ind === '\t' ? 4 : ind);
+      }
       const count = Array.isArray(value) ? `${value.length} phần tử` : value && typeof value === 'object' ? `${Object.keys(value).length} trường` : '';
       t2j.status.textContent = `${t2j.format.value === 'auto' ? 'nhận diện: ' : ''}${T2J_FORMATS[format]}${count ? ' · ' + count : ''}`;
     } catch (err) {
@@ -1217,6 +1225,146 @@ function runT2j() {
   }
   t2j.copy.disabled = t2j.download.disabled = !t2j.json;
 }
+// ---------- Cây JSON thu gọn được ----------
+// Mỗi object / mảng là một .jt-node: dòng mở (nút ▾, key, dấu mở, tóm tắt khi thu gọn), các con, dòng đóng.
+// Dựng bằng DOM (textContent), không chèn chuỗi người dùng dạng HTML.
+const JT_MAX_NODES = 20000;
+function renderJsonTree(value, indent) {
+  let count = 0;
+  const h = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  };
+  const scalar = (v) => {
+    if (v === null) return h('span', 'hljs-literal', 'null');
+    if (typeof v === 'boolean') return h('span', 'hljs-literal', String(v));
+    if (typeof v === 'number') return h('span', 'hljs-number', String(v));
+    return h('span', 'hljs-string', JSON.stringify(v));
+  };
+  const pathText = (path) => '$' + path.map((p) => (typeof p === 'number' ? `[${p}]` : /^[\p{L}_$][\p{L}\p{N}_$]*$/u.test(p) ? `.${p}` : `[${JSON.stringify(p)}]`)).join('');
+  const build = (v, key, path, depth, last) => {
+    if (++count > JT_MAX_NODES) throw new Error('too-big');
+    const pad = `${depth * indent}ch`;
+    const comma = last ? '' : ',';
+    const keyEls = () => (key === undefined ? [] : [h('span', 'hljs-attr', typeof key === 'number' ? '' : JSON.stringify(key)), h('span', null, typeof key === 'number' ? '' : ': ')]);
+    if (!v || typeof v !== 'object') {
+      const line = h('div', 'jt-line');
+      line.style.paddingLeft = pad;
+      line.append(...keyEls(), scalar(v), document.createTextNode(comma));
+      return line;
+    }
+    const isArr = Array.isArray(v);
+    const entries = isArr ? v.map((x, k) => [k, x]) : Object.entries(v);
+    const node = h('div', 'jt-node');
+    node.dataset.depth = depth;
+    node._path = path;
+    node._value = v;
+    const line = h('div', 'jt-line');
+    line.style.paddingLeft = pad;
+    const tog = h('button', 'jt-tog', '▾');
+    tog.type = 'button';
+    tog.title = 'Thu gọn / mở rộng';
+    tog.setAttribute('aria-label', 'Thu gọn / mở rộng');
+    const open = h('span', 'jt-brace', isArr ? '[' : '{');
+    const summary = h('span', 'jt-summary', ` … ${isArr ? ']' : '}'}`);
+    const openComma = h('span', 'jt-open-comma', comma);
+    const countEl = h('span', 'jt-count', isArr ? `${entries.length} phần tử` : `${entries.length} trường`);
+    const actions = h('span', 'jt-actions');
+    const focusBtn = h('button', null, 'Tập trung');
+    focusBtn.type = 'button';
+    focusBtn.dataset.act = 'focus';
+    const copyBtn = h('button', null, 'Sao chép');
+    copyBtn.type = 'button';
+    copyBtn.dataset.act = 'copy';
+    actions.append(focusBtn, copyBtn);
+    line.append(tog, ...keyEls(), open, summary, openComma, countEl, actions);
+    const children = h('div', 'jt-children');
+    entries.forEach(([k, x], idx) => children.append(build(x, isArr ? idx : k, [...path, k], depth + 1, idx === entries.length - 1)));
+    const close = h('div', 'jt-line jt-close', `${isArr ? ']' : '}'}${comma}`);
+    close.style.paddingLeft = pad;
+    if (!entries.length) {
+      // Object / mảng rỗng: một dòng, không cần thu gọn
+      tog.style.visibility = 'hidden';
+      summary.remove();
+      openComma.remove();
+      countEl.remove();
+      open.textContent = isArr ? `[]${comma}` : `{}${comma}`;
+      node.append(line);
+      return node;
+    }
+    node.append(line, children, close);
+    return node;
+  };
+  let tree;
+  try {
+    tree = h('div', 'jt');
+    tree.style.paddingLeft = '1.3em';
+    tree.append(build(value, undefined, [], 0, true));
+  } catch {
+    // JSON quá lớn: hiện dạng văn bản để không làm chậm trình duyệt
+    t2j.output.innerHTML = hljs.highlight(t2j.json, { language: 'json' }).value;
+    $('#jtBar').hidden = true;
+    return;
+  }
+  tree._pathText = pathText;
+  t2j.output.replaceChildren(tree);
+  $('#jtBar').hidden = false;
+  $('#jtLevel').value = '';
+  setFocus(null);
+}
+const jtNodes = () => $$('.jt-node', t2j.output);
+function setCollapsed(node, collapsed) {
+  node.classList.toggle('is-collapsed', collapsed);
+}
+function setFocus(node) {
+  $$('.jt-node.is-focus', t2j.output).forEach((n) => n.classList.remove('is-focus'));
+  $('#jtFocus').hidden = !node;
+  if (!node) return;
+  // Thu gọn tất cả, chỉ mở đường dẫn tới phần tử và chính phần tử đó (các con trực tiếp hiện ra)
+  for (const n of jtNodes()) setCollapsed(n, true);
+  for (let p = node; p && p.classList?.contains('jt-node'); p = p.parentElement.closest('.jt-node')) setCollapsed(p, false);
+  node.classList.add('is-focus');
+  const tree = $('.jt', t2j.output);
+  const path = node._path;
+  $('#jtFocusPath').textContent = path.length ? tree._pathText(path).replace(/^\$\.?/, '$ › ').replace(/\.|(?=\[)/g, ' › ') : '$ (gốc)';
+  node.scrollIntoView({ block: 'nearest' });
+}
+t2j.output.addEventListener('click', async (e) => {
+  const node = e.target.closest('.jt-node');
+  if (!node) return;
+  const act = e.target.closest('[data-act]')?.dataset.act;
+  if (act === 'focus') return setFocus(node);
+  if (act === 'copy') {
+    const ind = t2j.indent.value === 'tab' ? '\t' : Number(t2j.indent.value);
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(node._value, null, ind));
+      toast('Đã sao chép phần tử.');
+    } catch {
+      toast('Trình duyệt không cho phép sao chép.', true);
+    }
+    return;
+  }
+  if (e.target.closest('.jt-tog, .jt-summary, .jt-brace, .jt-count')) {
+    setCollapsed(node, !node.classList.contains('is-collapsed'));
+  }
+});
+$('#jtExpand').addEventListener('click', () => { jtNodes().forEach((n) => setCollapsed(n, false)); setFocus(null); $('#jtLevel').value = ''; });
+$('#jtCollapse').addEventListener('click', () => {
+  // Giữ gốc mở để còn thấy các phần tử cấp 1
+  jtNodes().forEach((n) => setCollapsed(n, Number(n.dataset.depth) > 0));
+  setFocus(null);
+  $('#jtLevel').value = '';
+});
+$('#jtLevel').addEventListener('change', () => {
+  const level = Number($('#jtLevel').value);
+  if (!level) return;
+  jtNodes().forEach((n) => setCollapsed(n, Number(n.dataset.depth) >= level));
+  setFocus(null);
+});
+$('#jtUnfocus').addEventListener('click', () => { jtNodes().forEach((n) => setCollapsed(n, false)); setFocus(null); });
+
 let t2jTimer;
 t2j.input.addEventListener('input', () => { clearTimeout(t2jTimer); t2jTimer = setTimeout(runT2j, 250); });
 for (const c of [t2j.format, t2j.indent, t2j.typed]) c.addEventListener('change', runT2j);
