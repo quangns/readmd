@@ -352,11 +352,37 @@ select {
   width: 100%;
   min-height: calc(100dvh - 220px);
   resize: vertical;
-  padding: 1.25rem 1.5rem;
-  border: 1px solid var(--line); border-radius: 0.75rem;
-  background: var(--paper); color: var(--ink);
+  padding: 1.25rem 1.5rem 1.25rem 0.9rem;
+  color: var(--ink);
   font-family: var(--font-mono); font-size: 0.8125rem; line-height: 1.65;
   tab-size: 2;
+}
+
+/* Ô nhập có cột số dòng (attachLineNumbers trong app.js): khung, nền, viền nằm ở wrapper */
+.lnwrap {
+  position: relative;
+  display: grid; grid-template-columns: auto minmax(0, 1fr);
+  border: 1px solid var(--line); border-radius: 0.75rem;
+  background: var(--paper);
+  overflow: hidden;
+}
+.lnwrap:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lnwrap > textarea.lnwrap__input { border: 0; border-radius: 0; background: transparent; outline: none; white-space: pre; overflow: auto; }
+.lnwrap__gutter {
+  position: relative; overflow: hidden;
+  min-width: calc(var(--ln-digits, 2) * 1ch + 1.4rem);
+  border-right: 1px solid var(--line);
+  background: var(--wash);
+  font-family: var(--font-mono); font-size: 0.8125rem; color: var(--ink-3);
+  text-align: right; user-select: none; pointer-events: none;
+}
+/* Cột số đặt tuyệt đối: không làm giãn chiều cao khung (ô nhập vẫn cuộn bên trong) */
+.lnwrap__nums { position: absolute; top: 0; left: 0; right: 0; white-space: pre; padding: 0 0.6rem 0 0.8rem; will-change: transform; }
+.editor .lnwrap__nums { padding-top: 1.25rem; line-height: 1.65; }
+.lnwrap__err {
+  position: absolute; left: 0; right: 0;
+  background: color-mix(in srgb, var(--rose) 18%, transparent);
+  border-left: 3px solid var(--rose);
 }
 
 /* Tab Text -> JSON */
@@ -380,6 +406,20 @@ select {
   font-family: var(--font-mono); font-size: 0.8125rem; line-height: 1.6;
   tab-size: 2;
 }
+#t2jInput.lnwrap__input { padding-left: 0.9rem; }
+.t2j__col .lnwrap__nums { padding-top: 1rem; line-height: 1.6; }
+
+/* Kết quả JSON dạng văn bản và cây: số dòng bên trái */
+.t2j__output .code-ln { counter-reset: ln; }
+.t2j__output .code-line { display: block; position: relative; padding-left: calc(var(--ln-digits, 2) * 1ch + 1.4rem); min-height: 1.6em; }
+.t2j__output .code-line::before, .jt-line::before {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: calc(var(--ln-digits, 2) * 1ch + 0.6rem); padding-right: 0.5rem;
+  text-align: right; color: var(--ink-3); user-select: none;
+  border-right: 1px solid var(--line);
+}
+.t2j__output .code-line::before { counter-increment: ln; content: counter(ln); }
+.t2j__output:has(.code-ln), .t2j__output:has(.jt) { padding-left: 0.35rem; }
 #t2jInput { resize: vertical; }
 .t2j__out { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
 .t2j__out:has(.jt-bar:not([hidden])) .t2j__output { border-top-left-radius: 0; border-top-right-radius: 0; }
@@ -396,8 +436,10 @@ select {
 .jt-level select { height: 26px; padding: 0 0.3rem; font-size: 0.75rem; }
 .jt-focus { display: inline-flex; align-items: center; gap: 0.4rem; margin-left: auto; min-width: 0; }
 .jt-focus__path { color: var(--accent); background: var(--accent-tint); padding: 0.1rem 0.4rem; border-radius: 0.3rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40ch; }
-.jt { font-family: var(--font-mono); font-size: 0.8125rem; line-height: 1.6; }
+.jt { font-family: var(--font-mono); font-size: 0.8125rem; line-height: 1.6; --jt-gutter: calc(var(--ln-digits, 2) * 1ch + 1.1rem); padding-left: calc(var(--jt-gutter) + 1.3em); }
 .jt-line { position: relative; display: flex; align-items: baseline; min-height: 1.6em; white-space: pre; border-radius: 0.3rem; }
+/* Số dòng của cây JSON: nằm trong cột trái, theo bản in đẹp của JSON (thu gọn thì nhảy cóc) */
+.jt-line::before { content: attr(data-ln); left: calc(-1 * var(--jt-gutter) - 1.3em); padding-right: 0.5rem; width: calc(var(--jt-gutter) - 1.1rem); }
 .jt-line:hover { background: var(--wash); }
 .jt-tog {
   flex: none; width: 1.2em; margin-left: -1.3em; padding: 0; border: 0; background: none;

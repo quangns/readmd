@@ -78,6 +78,21 @@
 .doc code, .doc pre { font-variant-ligatures: none; font-feature-settings: 'liga' 0, 'calt' 0; }
 .doc pre code { background: none; border: 0; padding: 0; font-size: 0.82rem; white-space: pre; }
 .doc pre code.hljs { background: none; padding: 0; }
+/* Khối mã có số dòng (từ 2 dòng): mỗi dòng một khối, số bằng CSS counter — dòng dài xuống dòng vẫn không lệch,
+   copy code không kèm số dòng. Dùng chung cho bản xem và PDF */
+.doc pre.code-ln { padding-left: 0; counter-reset: ln; }
+.doc pre.code-ln code { display: block; }
+.doc pre.code-ln .code-line {
+  display: block; position: relative; min-height: 1.55em;
+  padding-left: calc(var(--ln-digits, 2) * 1ch + 1.6em);
+}
+.doc pre.code-ln .code-line::before {
+  counter-increment: ln; content: counter(ln);
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: calc(var(--ln-digits, 2) * 1ch + 0.55em); padding-right: 0.45em;
+  text-align: right; color: var(--ink-3); user-select: none;
+  border-right: 1px solid var(--line);
+}
 
 /* Bảng */
 .doc .table-wrap { overflow-x: auto; margin: 0 0 1.25em; }

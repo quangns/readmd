@@ -219,7 +219,11 @@ function createRenderer(slug, headings, diagrams) {
     let body;
     if (language && hljs.getLanguage(language)) body = hljs.highlight(text, { language, ignoreIllegals: true }).value;
     else body = escapeHtml(text);
-    return `<pre><code class="hljs${language ? ' language-' + escapeHtml(language) : ''}">${body}</code></pre>\n`;
+    const cls = `hljs${language ? ' language-' + escapeHtml(language) : ''}`;
+    const lines = text.split('\n').length;
+    if (lines < 2) return `<pre><code class="${cls}">${body}</code></pre>\n`;
+    // Có số dòng: mỗi dòng một khối, số dòng bằng CSS counter (dòng dài tự xuống dòng vẫn không lệch số)
+    return `<pre class="code-ln" style="--ln-digits:${Math.max(2, String(lines).length)}"><code class="${cls}">${numberedHtml(body)}</code></pre>\n`;
   };
 
   const baseTable = renderer.table.bind(renderer);
@@ -242,6 +246,89 @@ function diagramLabel(d) {
 }
 function captionHtml(no, d) {
   return `<span class="fig-no">Hình ${no}</span> — ${escapeHtml(diagramLabel(d))}`;
+}
+
+// ---------- Số dòng ----------
+/** Tách HTML đã tô màu (hljs: chỉ có <span> và văn bản đã escape) thành từng dòng.
+ *  Thẻ <span> kéo dài qua nhiều dòng (chuỗi / comment nhiều dòng) được đóng ở cuối dòng và mở lại ở dòng sau
+ *  để mỗi dòng là HTML hợp lệ. */
+function splitHtmlLines(html) {
+  const lines = [];
+  const stack = [];
+  let cur = '';
+  const re = /(<span[^>]*>)|(<\/span>)|(\n)|([^<\n]+|<)/g;
+  let m;
+  while ((m = re.exec(html))) {
+    if (m[1]) { stack.push(m[1]); cur += m[1]; }
+    else if (m[2]) { stack.pop(); cur += m[2]; }
+    else if (m[3]) { cur += '</span>'.repeat(stack.length); lines.push(cur); cur = stack.join(''); }
+    else cur += m[4];
+  }
+  lines.push(cur);
+  return lines;
+}
+/** HTML nhiều dòng -> các <span class="code-line"> (số dòng hiện bằng CSS counter, không bị copy theo) */
+function numberedHtml(html) {
+  return splitHtmlLines(html).map((l) => `<span class="code-line">${l}</span>`).join('');
+}
+
+/** Gắn cột số dòng cho textarea: cuộn đồng bộ, tô đỏ dòng lỗi.
+ *  Bắt cả khi nội dung được gán bằng code (ta.value = …) để không phải gọi cập nhật thủ công. */
+function attachLineNumbers(ta) {
+  const wrap = document.createElement('div');
+  wrap.className = 'lnwrap';
+  const gutter = document.createElement('div');
+  gutter.className = 'lnwrap__gutter';
+  gutter.setAttribute('aria-hidden', 'true');
+  const nums = document.createElement('div');
+  nums.className = 'lnwrap__nums';
+  const mark = document.createElement('div');
+  mark.className = 'lnwrap__err';
+  mark.hidden = true;
+  nums.append(mark);
+  const text = document.createElement('div');
+  nums.append(text);
+  gutter.append(nums);
+  ta.parentNode.insertBefore(wrap, ta);
+  wrap.append(gutter, ta);
+  ta.classList.add('lnwrap__input');
+  ta.setAttribute('wrap', 'off'); // không tự xuống dòng để số dòng luôn khớp dòng thật
+
+  let count = 0;
+  let errLine = 0;
+  const lineHeight = () => parseFloat(getComputedStyle(ta).lineHeight) || 20;
+  const sync = () => { nums.style.transform = `translateY(${-ta.scrollTop}px)`; };
+  const placeError = () => {
+    mark.hidden = !errLine || errLine > count;
+    if (!mark.hidden) {
+      const lh = lineHeight();
+      mark.style.top = `${parseFloat(getComputedStyle(nums).paddingTop) + (errLine - 1) * lh}px`;
+      mark.style.height = `${lh}px`;
+    }
+    $$('.is-error', text).forEach((x) => x.classList.remove('is-error'));
+  };
+  const render = () => {
+    const n = ta.value.split('\n').length;
+    if (n !== count) {
+      count = n;
+      text.textContent = Array.from({ length: n }, (_, i) => i + 1).join('\n');
+      wrap.style.setProperty('--ln-digits', String(Math.max(2, String(n).length)));
+      placeError();
+    }
+    sync();
+  };
+  ta.addEventListener('input', render);
+  ta.addEventListener('scroll', sync);
+  const proto = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+  Object.defineProperty(ta, 'value', {
+    get() { return proto.get.call(this); },
+    set(v) { proto.set.call(this, v); render(); },
+  });
+  render();
+  return {
+    refresh: render,
+    setError(line) { errLine = line || 0; placeError(); wrap.classList.toggle('has-error', !!errLine); },
+  };
 }
 
 function escapeHtml(s) {
@@ -943,6 +1030,7 @@ for (const id of ['#btnSample', '#btnEmptySample']) {
 }
 
 // Soạn trực tiếp
+attachLineNumbers(el.editor);
 let editTimer;
 el.editor.addEventListener('input', () => {
   clearTimeout(editTimer);
@@ -1223,6 +1311,7 @@ const t2j = {
   format: $('#t2jFormat'), indent: $('#t2jIndent'), typed: $('#t2jTyped'), fromDoc: $('#t2jFromDoc'),
   copy: $('#t2jCopy'), download: $('#t2jDownload'), json: '',
 };
+const t2jLines = attachLineNumbers(t2j.input);
 for (const [value, label] of Object.entries(T2J_FORMATS)) t2j.format.add(new Option(label, value));
 const T2J_SAMPLE = `// Request
 { "email": "partner_email", "password": 'partner_password', clientId: "your_client_id",
@@ -1236,6 +1325,7 @@ function runT2j() {
   t2j.output.classList.remove('is-error');
   t2j.status.classList.remove('is-error');
   $('#jtBar').hidden = true;
+  t2jLines.setError(0);
   if (!text.trim()) {
     t2j.output.innerHTML = '<span class="muted">Kết quả hiện ở đây.</span>';
     t2j.status.textContent = '';
@@ -1247,7 +1337,7 @@ function runT2j() {
       t2j.value = value;
       if (ind === 0 || !value || typeof value !== 'object') {
         // Thu gọn 1 dòng / giá trị đơn: hiện dạng văn bản
-        t2j.output.innerHTML = hljs.highlight(t2j.json, { language: 'json' }).value;
+        t2j.output.innerHTML = `<div class="code-ln" style="--ln-digits:${Math.max(2, String(t2j.json.split('\n').length).length)}">${numberedHtml(hljs.highlight(t2j.json, { language: 'json' }).value)}</div>`;
         $('#jtBar').hidden = true;
       } else {
         renderJsonTree(value, ind === '\t' ? 4 : ind);
@@ -1257,6 +1347,7 @@ function runT2j() {
     } catch (err) {
       t2j.output.classList.add('is-error');
       t2j.output.textContent = err.message;
+      if (err.line) t2jLines.setError(err.line);
       t2j.status.textContent = 'lỗi';
       t2j.status.classList.add('is-error');
     }
@@ -1269,6 +1360,7 @@ function runT2j() {
 const JT_MAX_NODES = 20000;
 function renderJsonTree(value, indent) {
   let count = 0;
+  let ln = 0; // số dòng tương ứng JSON.stringify(value, null, indent)
   const h = (tag, cls, text) => {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -1289,6 +1381,7 @@ function renderJsonTree(value, indent) {
     const keyEls = () => (key === undefined ? [] : [h('span', 'hljs-attr', typeof key === 'number' ? '' : JSON.stringify(key)), h('span', null, typeof key === 'number' ? '' : ': ')]);
     if (!v || typeof v !== 'object') {
       const line = h('div', 'jt-line');
+      line.dataset.ln = ++ln;
       line.style.paddingLeft = pad;
       line.append(...keyEls(), scalar(v), document.createTextNode(comma));
       return line;
@@ -1300,6 +1393,7 @@ function renderJsonTree(value, indent) {
     node._path = path;
     node._value = v;
     const line = h('div', 'jt-line');
+    line.dataset.ln = ++ln;
     line.style.paddingLeft = pad;
     const tog = h('button', 'jt-tog', '▾');
     tog.type = 'button';
@@ -1321,6 +1415,7 @@ function renderJsonTree(value, indent) {
     const children = h('div', 'jt-children');
     entries.forEach(([k, x], idx) => children.append(build(x, isArr ? idx : k, [...path, k], depth + 1, idx === entries.length - 1)));
     const close = h('div', 'jt-line jt-close', `${isArr ? ']' : '}'}${comma}`);
+    close.dataset.ln = ++ln;
     close.style.paddingLeft = pad;
     if (!entries.length) {
       // Object / mảng rỗng: một dòng, không cần thu gọn
@@ -1329,6 +1424,7 @@ function renderJsonTree(value, indent) {
       openComma.remove();
       countEl.remove();
       open.textContent = isArr ? `[]${comma}` : `{}${comma}`;
+      ln--; // object / mảng rỗng chỉ chiếm 1 dòng
       node.append(line);
       return node;
     }
@@ -1338,11 +1434,11 @@ function renderJsonTree(value, indent) {
   let tree;
   try {
     tree = h('div', 'jt');
-    tree.style.paddingLeft = '1.3em';
     tree.append(build(value, undefined, [], 0, true));
+    tree.style.setProperty('--ln-digits', String(Math.max(2, String(ln).length)));
   } catch {
     // JSON quá lớn: hiện dạng văn bản để không làm chậm trình duyệt
-    t2j.output.innerHTML = hljs.highlight(t2j.json, { language: 'json' }).value;
+    t2j.output.innerHTML = `<div class="code-ln" style="--ln-digits:${Math.max(2, String(t2j.json.split('\n').length).length)}">${numberedHtml(hljs.highlight(t2j.json, { language: 'json' }).value)}</div>`;
     $('#jtBar').hidden = true;
     return;
   }
