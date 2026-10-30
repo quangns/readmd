@@ -406,7 +406,23 @@ select {
 }
 
 /* Tab Mã hoá / Base64 */
-.segmented.segmented--mode { grid-template-columns: repeat(3, auto); margin: 0; }
+.segmented.segmented--mode { grid-template-columns: repeat(4, auto); margin: 0; }
+.kg { display: grid; gap: 0.75rem; }
+.kg[hidden], .t2j__grid[hidden] { display: none; }
+.kg-info {
+  display: flex; flex-wrap: wrap; gap: 0.35rem 1.5rem;
+  padding: 0.6rem 0.9rem; border: 1px solid var(--line); border-radius: 0.6rem; background: var(--wash);
+  font-size: 0.8rem; color: var(--ink-2);
+}
+.kg-info b { color: var(--ink); font-weight: 600; }
+.kg-info code { font-size: 0.75rem; word-break: break-all; }
+.kg-info .is-ok { color: #15803D; font-weight: 600; }
+html[data-theme='dark'] .kg-info .is-ok { color: #4ADE80; }
+.kg-info .is-error { color: var(--rose); font-weight: 600; }
+.kg-out { white-space: pre-wrap; word-break: break-all; min-height: calc(100dvh - 380px); font-size: 0.78rem; }
+/* PEM: giữ nguyên dòng 64 ký tự (không ngắt giữa dòng gây hiểu nhầm khoá bị hỏng), cuộn ngang nếu hẹp */
+.kg-out.is-pem { white-space: pre; word-break: normal; overflow-x: auto; }
+.kg-out.is-busy { opacity: 0.5; }
 .segmented--mode .segmented__item { padding: 0 0.9rem; min-height: 36px; }
 .ct-opts { display: inline-flex; flex-wrap: wrap; align-items: end; gap: 0.75rem 1.25rem; }
 .ct-opts[hidden] { display: none; }
@@ -433,6 +449,8 @@ select {
 .ct-output.is-binary { white-space: pre; word-break: normal; }
 @media (max-width: 960px) {
   #ctInput, .ct-output { min-height: 220px; }
+  .segmented.segmented--mode { grid-template-columns: repeat(2, 1fr); width: 100%; }
+  .kg-out { min-height: 200px; }
   .ct-key input { min-width: 0; width: 100%; }
 }
 

@@ -262,6 +262,7 @@
               <button class="segmented__item is-active" role="radio" aria-checked="true" data-ct-mode="hash">SHA-256 / băm</button>
               <button class="segmented__item" role="radio" aria-checked="false" data-ct-mode="b64enc">Mã hoá Base64</button>
               <button class="segmented__item" role="radio" aria-checked="false" data-ct-mode="b64dec">Giải mã Base64</button>
+              <button class="segmented__item" role="radio" aria-checked="false" data-ct-mode="keygen">Sinh cặp khoá</button>
             </div>
             <span class="ct-opts" data-ct-for="hash">
               <label class="field field--inline">
@@ -282,9 +283,42 @@
               <label class="check check--sm"><input type="checkbox" id="ctWrap"> Ngắt dòng mỗi 76 ký tự</label>
             </span>
             <span class="ct-opts ct-note" data-ct-for="b64dec" hidden>Tự nhận Base64URL, thiếu dấu "=", xuống dòng, tiền tố data:…;base64,</span>
+            <span class="ct-opts" data-ct-for="keygen" hidden>
+              <label class="field field--inline"><span class="field__label">Phương thức</span><select id="kgAlgo"></select></label>
+              <label class="field field--inline"><span class="field__label">Độ dài / đường cong</span><select id="kgSize"></select></label>
+              <label class="field field--inline" id="kgPurposeField"><span class="field__label">Mục đích</span><select id="kgPurpose"></select></label>
+              <label class="field field--inline"><span class="field__label">Định dạng</span><select id="kgFormat"></select></label>
+              <button class="btn btn--primary" id="kgGenerate">Sinh khoá</button>
+            </span>
           </div>
           <p class="ct-hint" data-ct-for="hash">SHA là hàm băm một chiều: dùng để tạo / đối chiếu chữ ký, <strong>không giải mã ngược được</strong>. Văn bản được băm theo UTF-8.</p>
-          <div class="t2j__grid">
+          <div class="kg" data-ct-for="keygen" hidden>
+            <p class="ct-hint">Khoá được sinh ngay trên máy bằng WebCrypto, không gửi đi đâu. <strong>Giữ bí mật khoá bí mật</strong> — chỉ chia sẻ khoá công khai.</p>
+            <div class="kg-info" id="kgInfo" hidden></div>
+            <div class="t2j__grid">
+              <div class="t2j__col" id="kgPublicCol">
+                <div class="t2j__head">
+                  <span class="t2j__title">Khoá công khai</span>
+                  <div class="t2j__tools">
+                    <button class="btn btn--ghost btn--sm" data-kg-copy="public" disabled>Sao chép</button>
+                    <button class="btn btn--ghost btn--sm" data-kg-save="public" disabled>Tải file</button>
+                  </div>
+                </div>
+                <pre class="t2j__output kg-out" id="kgPublic"><span class="muted">Chọn phương thức, độ dài rồi bấm "Sinh khoá".</span></pre>
+              </div>
+              <div class="t2j__col">
+                <div class="t2j__head">
+                  <span class="t2j__title" id="kgPrivateTitle">Khoá bí mật</span>
+                  <div class="t2j__tools">
+                    <button class="btn btn--ghost btn--sm" data-kg-copy="private" disabled>Sao chép</button>
+                    <button class="btn btn--ghost btn--sm" data-kg-save="private" disabled>Tải file</button>
+                  </div>
+                </div>
+                <pre class="t2j__output kg-out" id="kgPrivate"></pre>
+              </div>
+            </div>
+          </div>
+          <div class="t2j__grid" data-ct-for="hash b64enc b64dec">
             <div class="t2j__col">
               <div class="t2j__head">
                 <span class="t2j__title">Đầu vào <span class="t2j__status" id="ctInInfo"></span></span>

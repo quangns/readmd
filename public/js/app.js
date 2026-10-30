@@ -2,7 +2,10 @@
 // Thư viện marked, DOMPurify, hljs, mermaid được nạp dạng global từ /vendor.
 import { diagramInfo, toText, slugger, splitFrontmatter, flowchartToSequence, liftDiagramCaptions } from './srs-core.js';
 import { FORMATS as T2J_FORMATS, convertToJson } from './text2json.js';
-import { hashBytes, formatDigest, bytesToBase64, base64ToBytes, utf8Bytes, utf8Text, hexDump } from './crypto-tools.js';
+import {
+  hashBytes, formatDigest, bytesToBase64, base64ToBytes, utf8Bytes, utf8Text, hexDump,
+  KEY_ALGOS, keyAlgoSupported, generateKeys, exportKeys, keyFormats, keyFingerprint, selfTestKeys,
+} from './crypto-tools.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -1448,6 +1451,7 @@ const ct = {
 const fmtBytes = (n) => (n < 1024 ? `${n} byte` : formatBytes(n));
 
 async function runCrypto() {
+  if (ct.mode === 'keygen') return;
   const seq = ++ct.seq;
   ct.out = '';
   ct.outBytes = null;
@@ -1522,7 +1526,7 @@ function setCryptoMode(mode) {
     b.classList.toggle('is-active', on);
     b.setAttribute('aria-checked', String(on));
   });
-  $$('[data-ct-for]').forEach((e) => { e.hidden = e.dataset.ctFor !== mode; });
+  $$('[data-ct-for]').forEach((e) => { e.hidden = !e.dataset.ctFor.split(' ').includes(mode); });
   ct.input.placeholder = mode === 'b64dec' ? 'Dán chuỗi Base64 cần giải mã…' : 'Nhập hoặc dán văn bản cần xử lý…';
   runCrypto();
 }
@@ -1585,6 +1589,110 @@ ct.save.addEventListener('click', () => {
   const ext = sniffType(ct.outBytes) || (utf8Text(ct.outBytes) != null ? 'txt' : 'bin');
   downloadBlob(new Blob([ct.outBytes]), `giai-ma-base64.${ext}`);
 });
+
+// ---------- Sinh cặp khoá ----------
+const kg = {
+  algo: $('#kgAlgo'), size: $('#kgSize'), purpose: $('#kgPurpose'), format: $('#kgFormat'),
+  btn: $('#kgGenerate'), info: $('#kgInfo'), pub: $('#kgPublic'), priv: $('#kgPrivate'),
+  keys: null, exported: null,
+};
+const fillSelect = (sel, items, value) => {
+  sel.replaceChildren(...items.map(([v, label]) => new Option(label, v)));
+  if (value && items.some(([v]) => v === value)) sel.value = value;
+};
+(async () => {
+  for (const [id, def] of Object.entries(KEY_ALGOS)) {
+    if (await keyAlgoSupported(id)) kg.algo.add(new Option(def.label, id));
+  }
+  updateKgOptions();
+})();
+function updateKgOptions() {
+  const def = KEY_ALGOS[kg.algo.value];
+  if (!def) return;
+  fillSelect(kg.size, def.sizes, def.defaultSize);
+  kg.size.disabled = def.sizes.length === 1;
+  $('#kgPurposeField').hidden = !def.purposes;
+  if (def.purposes) fillSelect(kg.purpose, def.purposes, kg.purpose.value);
+  fillSelect(kg.format, keyFormats(kg.algo.value), kg.format.value);
+  // Khoá đối xứng chỉ có một khoá
+  $('#kgPublicCol').hidden = def.kind === 'secret';
+  $('#kgPrivateTitle').textContent = def.kind === 'secret' ? 'Khoá bí mật (đối xứng)' : 'Khoá bí mật';
+}
+kg.algo.addEventListener('change', () => { updateKgOptions(); resetKgOutput(); });
+kg.size.addEventListener('change', resetKgOutput);
+kg.purpose.addEventListener('change', resetKgOutput);
+kg.format.addEventListener('change', () => { if (kg.keys) showKeys(); });
+function resetKgOutput() {
+  kg.keys = null;
+  kg.exported = null;
+  kg.info.hidden = true;
+  kg.pub.innerHTML = '<span class="muted">Chọn phương thức, độ dài rồi bấm "Sinh khoá".</span>';
+  kg.priv.textContent = '';
+  $$('[data-kg-copy], [data-kg-save]').forEach((b) => { b.disabled = true; });
+}
+async function showKeys() {
+  kg.exported = await exportKeys(kg.keys, kg.format.value);
+  kg.pub.textContent = kg.exported.publicText || '';
+  kg.priv.textContent = kg.exported.privateText;
+  const pem = /^(pem|pkcs1)$/.test(kg.format.value);
+  kg.pub.classList.toggle('is-pem', pem);
+  kg.priv.classList.toggle('is-pem', pem);
+  $$('[data-kg-copy], [data-kg-save]').forEach((b) => { b.disabled = !kg.exported[`${b.dataset.kgCopy || b.dataset.kgSave}Text`]; });
+}
+kg.btn.addEventListener('click', async () => {
+  const def = KEY_ALGOS[kg.algo.value];
+  kg.btn.disabled = true;
+  kg.btn.textContent = 'Đang sinh…';
+  kg.pub.classList.add('is-busy');
+  kg.priv.classList.add('is-busy');
+  const t0 = performance.now();
+  try {
+    kg.keys = await generateKeys(kg.algo.value, kg.size.value, def.purposes ? kg.purpose.value : undefined);
+    const ms = Math.round(performance.now() - t0);
+    await showKeys();
+    const fp = await keyFingerprint(kg.keys);
+    const purpose = def.purposes ? def.purposes.find(([v]) => v === kg.purpose.value)[1] : '';
+    const item = (label, value) => { const sp = document.createElement('span'); sp.append(Object.assign(document.createElement('b'), { textContent: label + ': ' }), value); return sp; };
+    const code = Object.assign(document.createElement('code'), { textContent: fp.base64, title: fp.hex });
+    const test = Object.assign(document.createElement('span'), { textContent: 'đang kiểm tra…' });
+    kg.info.replaceChildren(
+      item('Khoá', `${def.label} · ${kg.size.selectedOptions[0].textContent}${purpose ? ' · ' + purpose : ''}`),
+      item('JWK alg', kg.keys.jwkAlg),
+      item(def.kind === 'secret' ? 'Vân tay SHA-256' : 'Vân tay khoá công khai', code),
+      item('Thời gian sinh', `${ms} ms`),
+      item('Tự kiểm tra', test),
+    );
+    kg.info.hidden = false;
+    try {
+      test.textContent = `✓ ${await selfTestKeys(kg.keys)}`;
+      test.className = 'is-ok';
+    } catch (err) {
+      test.textContent = `✗ ${err.message}`;
+      test.className = 'is-error';
+    }
+  } catch (err) {
+    toast(err.message, true);
+  } finally {
+    kg.btn.disabled = false;
+    kg.btn.textContent = 'Sinh khoá';
+    kg.pub.classList.remove('is-busy');
+    kg.priv.classList.remove('is-busy');
+  }
+});
+$$('[data-kg-copy]').forEach((b) => b.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(kg.exported[`${b.dataset.kgCopy}Text`]);
+    toast(b.dataset.kgCopy === 'public' ? 'Đã sao chép khoá công khai.' : 'Đã sao chép khoá bí mật.');
+  } catch {
+    toast('Trình duyệt không cho phép sao chép.', true);
+  }
+}));
+$$('[data-kg-save]').forEach((b) => b.addEventListener('click', () => {
+  const which = b.dataset.kgSave;
+  const prefix = `${kg.keys.algo.toLowerCase()}-${kg.keys.size.toLowerCase()}`;
+  const name = `${prefix}-${kg.exported[`${which}Name`]}`;
+  downloadBlob(new Blob([kg.exported[`${which}Text`]], { type: 'text/plain;charset=utf-8' }), name);
+}));
 
 // ---------- Bản desktop (Electron) ----------
 // Mở file từ hệ điều hành (nhấp đúp .md, "Mở bằng", menu Tệp > Mở) và các lệnh từ menu ứng dụng
