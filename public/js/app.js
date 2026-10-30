@@ -1876,6 +1876,7 @@ function updateKgOptions() {
   fillSelect(kg.format, keyFormats(kg.algo.value), kg.format.value);
   // Khoá đối xứng chỉ có một khoá
   $('#kgPublicCol').hidden = def.kind === 'secret';
+  $('#kgSaveBoth').hidden = def.kind === 'secret';
   $('#kgPrivateTitle').textContent = def.kind === 'secret' ? 'Khoá bí mật (đối xứng)' : 'Khoá bí mật';
 }
 kg.algo.addEventListener('change', () => { updateKgOptions(); resetKgOutput(); });
@@ -1889,6 +1890,7 @@ function resetKgOutput() {
   kg.pub.innerHTML = '<span class="muted">Chọn phương thức, độ dài rồi bấm "Sinh khoá".</span>';
   kg.priv.textContent = '';
   $$('[data-kg-copy], [data-kg-save]').forEach((b) => { b.disabled = true; });
+  $('#kgSaveBoth').disabled = true;
 }
 async function showKeys() {
   kg.exported = await exportKeys(kg.keys, kg.format.value);
@@ -1898,6 +1900,7 @@ async function showKeys() {
   kg.pub.classList.toggle('is-pem', pem);
   kg.priv.classList.toggle('is-pem', pem);
   $$('[data-kg-copy], [data-kg-save]').forEach((b) => { b.disabled = !kg.exported[`${b.dataset.kgCopy || b.dataset.kgSave}Text`]; });
+  $('#kgSaveBoth').disabled = !(kg.exported.publicText && kg.exported.privateText);
 }
 kg.btn.addEventListener('click', async () => {
   const def = KEY_ALGOS[kg.algo.value];
@@ -1947,12 +1950,19 @@ $$('[data-kg-copy]').forEach((b) => b.addEventListener('click', async () => {
     toast('Trình duyệt không cho phép sao chép.', true);
   }
 }));
-$$('[data-kg-save]').forEach((b) => b.addEventListener('click', () => {
-  const which = b.dataset.kgSave;
+function saveKey(which) {
   const prefix = `${kg.keys.algo.toLowerCase()}-${kg.keys.size.toLowerCase()}`;
   const name = `${prefix}-${kg.exported[`${which}Name`]}`;
   downloadBlob(new Blob([kg.exported[`${which}Text`]], { type: 'text/plain;charset=utf-8' }), name);
-}));
+}
+$$('[data-kg-save]').forEach((b) => b.addEventListener('click', () => saveKey(b.dataset.kgSave)));
+// Tải cả cặp khoá: file thứ hai cách 300 ms — trình duyệt có thể hỏi "cho phép tải nhiều file" ở lần đầu
+$('#kgSaveBoth').addEventListener('click', () => {
+  if (!kg.exported?.publicText || !kg.exported?.privateText) return;
+  saveKey('public');
+  setTimeout(() => saveKey('private'), 300);
+  toast('Đang tải khoá công khai và khoá bí mật.');
+});
 
 // ---------- Bản desktop (Electron) ----------
 // Mở file từ hệ điều hành (nhấp đúp .md, "Mở bằng", menu Tệp > Mở) và các lệnh từ menu ứng dụng

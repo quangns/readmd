@@ -514,7 +514,7 @@ html[data-theme='dark'] .kg-info .is-ok { color: #4ADE80; }
 .ct-opts .check { min-height: 38px; }
 /* Sinh cặp khoá: 4 ô chọn chia đều một hàng + nút, không gãy dòng trên màn laptop */
 @media (min-width: 641px) {
-  .ct-optrow .ct-opts[data-ct-for='keygen'] { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; align-items: end; width: 100%; }
+  .ct-optrow .ct-opts[data-ct-for='keygen'] { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto auto; align-items: end; width: 100%; }
   .ct-optrow .ct-opts[data-ct-for='keygen'][hidden] { display: none; }
   .ct-opts[data-ct-for='keygen'] select { min-width: 0; width: 100%; }
   /* Mục đích chỉ có với RSA: giữ chỗ để các ô khác không đổi vị trí */
