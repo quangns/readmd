@@ -7,6 +7,7 @@ export const FORMATS = {
   auto: 'Tự nhận diện',
   loose: 'JSON / JS object',
   java: 'Java toString (key=value)',
+  log: 'Log (tiền tố + JSON)',
   kv: 'key: value',
   table: 'Bảng (Markdown / CSV / TSV)',
   fields: 'Bảng field → JSON mẫu',
@@ -507,15 +508,130 @@ export function parseJavaToString(text, opts = {}) {
   return result;
 }
 
+// ---------- Log: tiền tố + JSON / Java toString ----------
+// "2026-09-30 23:53:00 [pool-1] INFO ... Response MobileAds: {"error_code":"123"}"
+// -> { "2026-09-30 23:53:00 [pool-1] INFO ... Response MobileAds": { "error_code": "123" } }
+// Ranh giới JSON xác định bằng cặp ngoặc (bỏ qua ngoặc trong chuỗi) nên JSON in nhiều dòng vẫn đọc được;
+// nhiều dòng log -> mỗi đoạn một key, key trùng đánh số (2), (3)…
+
+/** Vị trí sau dấu đóng khớp với dấu mở tại `start` (bỏ qua ngoặc nằm trong chuỗi "…"); -1 nếu không khớp */
+function matchBracket(src, start) {
+  const pairs = { '{': '}', '[': ']', '(': ')' };
+  const stack = [];
+  let inStr = false;
+  for (let k = start; k < src.length; k++) {
+    const c = src[k];
+    if (inStr) {
+      if (c === '\\') k++;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (pairs[c]) stack.push(pairs[c]);
+    else if (c === '}' || c === ']' || c === ')') {
+      if (stack.pop() !== c) return -1;
+      if (!stack.length) return k + 1;
+    }
+  }
+  return -1;
+}
+
+/** Payload hợp lệ trong log; undefined nếu chỉ là nhãn log như [pool-1], [INFO], [123] */
+function logPayload(raw, opts) {
+  if (raw[0] === '[') {
+    // Mảng: chỉ nhận JSON chuẩn có nội dung thật (>= 2 phần tử hoặc chứa object / mảng)
+    try {
+      const v = JSON.parse(raw);
+      return Array.isArray(v) && (v.length >= 2 || v.some((x) => x && typeof x === 'object')) ? v : undefined;
+    } catch { return undefined; }
+  }
+  const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length > 0;
+  try { const v = JSON.parse(raw); if (isObj(v)) return v; } catch { /* thử dạng lỏng */ }
+  try { const v = parseLoose(raw).value; if (isObj(v)) return v; } catch { /* thử Java */ }
+  try { const v = parseJavaToString(raw, opts); if (isObj(v)) return v; } catch { /* không phải payload */ }
+  return undefined;
+}
+
+function cleanLogKey(text) {
+  return text
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[\s:=>\-–—|,]+$/, '')
+    .trim();
+}
+
+/** Tách các đoạn "tiền tố + payload" trong text; trả [] nếu không có payload nào parse được */
+function extractLogEntries(text, opts) {
+  let src = text.trim();
+  // Cả chuỗi được bọc trong nháy: '…{…}…' hoặc "…{…}…"
+  if (/^(['"`]).*\1$/s.test(src) && /[{[]/.test(src.slice(1, -1))) src = src.slice(1, -1);
+  const entries = [];
+  let cursor = 0;
+  for (let k = 0; k < src.length; k++) {
+    const c = src[k];
+    if (c !== '{' && c !== '[') continue;
+    const end = matchBracket(src, k);
+    if (end < 0) continue;
+    const raw = src.slice(k, end);
+    const value = logPayload(raw, opts);
+    if (value === undefined) continue;
+    // "Tiền tố" = phần chữ từ sau payload trước tới đầu payload này
+    entries.push({ prefix: src.slice(cursor, k), value, start: k, end });
+    cursor = end;
+    k = end - 1;
+  }
+  if (entries.length) entries.trailing = src.slice(cursor);
+  return entries;
+}
+
+export function looksLikeLog(text, opts = {}) {
+  const entries = extractLogEntries(text, opts);
+  if (!entries.length) return false;
+  // Cần ít nhất một tiền tố có nội dung. Tên lớp dính liền dấu mở (Order{…}, Order[…]) là Java toString,
+  // không phải log; còn "Tags: […]", "data = {…}" có dấu ngăn cách thì vẫn là log
+  const className = new RegExp(`^\\s*${JAVA_KEY}$`, 'u');
+  return entries.some((e) => /[\p{L}\p{N}]/u.test(e.prefix) && !className.test(e.prefix));
+}
+
+export function parseLog(text, opts = {}) {
+  const entries = extractLogEntries(text, opts);
+  if (!entries.length) throw new ConvertError('Không tìm thấy JSON / object trong dòng log');
+  const out = {};
+  entries.forEach((e, idx) => {
+    let key = cleanLogKey(e.prefix);
+    // Phần chữ sau payload cuối cùng (vd. "took 23ms") ghép vào key để không mất thông tin
+    const tail = idx === entries.length - 1 ? cleanLogKey(entries.trailing || '') : '';
+    if (tail) key = key ? `${key} … ${tail}` : tail;
+    if (!key) key = `_${idx + 1}`;
+    let k = key;
+    for (let n = 2; Object.prototype.hasOwnProperty.call(out, k); n++) k = `${key} (${n})`;
+    out[k] = e.value;
+  });
+  return out;
+}
+
 // ---------- Nhận diện + chuyển ----------
 export function detectFormat(text) {
   const t = text.trim();
   if (!t) return 'auto';
   const lines = t.split('\n').map((l) => l.trim()).filter(Boolean);
   const code = lines.filter((l) => !/^(\/\/|#|\/\*|\*)/.test(l));
-  // Java toString ({a=1}, Order(id=1)) — kiểm tra trước JSON vì cũng bắt đầu bằng "{"
+  const startsBracket = code.length && /^[{[]/.test(code[0]);
+  if (startsBracket) {
+    // Bắt đầu bằng { [: JSON / Java toString nếu parse được cả đoạn; không thì có thể là log "[main] INFO … {…}"
+    let okLoose = false;
+    try { parseLoose(t); okLoose = true; } catch { /* thử tiếp */ }
+    if (looksLikeJavaToString(t) && !okLoose) {
+      try { parseJavaToString(t); return 'java'; } catch { /* thử log */ }
+    }
+    if (okLoose) return 'loose';
+    if (looksLikeLog(t)) return 'log';
+    return looksLikeJavaToString(t) ? 'java' : 'loose'; // để hiện lỗi cú pháp đúng loại
+  }
+  // Dòng log: chữ đứng trước rồi mới tới JSON / object -> tiền tố làm key
+  if (looksLikeLog(t)) return 'log';
+  // Java toString có tên lớp đứng trước (Order(id=1), Order{…})
   if (looksLikeJavaToString(t)) return 'java';
-  if (code.length && /^[{[]/.test(code[0])) return 'loose';
   if (lines.filter((l) => l.includes('|')).length >= 2 && lines.some((l) => /^\|?\s*:?-{2,}/.test(l))) {
     return looksLikeFieldTable(t) ? 'fields' : 'table';
   }
@@ -538,6 +654,7 @@ export function convertToJson(text, { format = 'auto', typed = true } = {}) {
   switch (fmt) {
     case 'loose': value = parseLoose(text).value; break;
     case 'java': value = parseJavaToString(text, opts); break;
+    case 'log': value = parseLog(text, opts); break;
     case 'kv': value = parseKeyValue(text, opts); break;
     case 'table': value = parseTable(text, opts); break;
     case 'fields': value = parseFieldTable(text); break;
