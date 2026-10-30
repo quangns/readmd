@@ -3,7 +3,7 @@
 import { diagramInfo, toText, slugger, splitFrontmatter, flowchartToSequence, liftDiagramCaptions } from './srs-core.js';
 import { FORMATS as T2J_FORMATS, convertToJson } from './text2json.js';
 import {
-  hashBytes, formatDigest, bytesToBase64, base64ToBytes, utf8Bytes, utf8Text, hexDump,
+  hashBytes, formatDigest, bytesToBase64, base64ToBytes, decodeJwt, utf8Bytes, utf8Text, hexDump,
   KEY_ALGOS, keyAlgoSupported, generateKeys, exportKeys, keyFormats, keyFingerprint, selfTestKeys,
 } from './crypto-tools.js';
 
@@ -1718,6 +1718,27 @@ async function runCrypto() {
       } else {
         const src = data ? utf8Text(data) : text;
         if (src == null) throw new Error('File không phải văn bản Base64.');
+        const jwt = decodeJwt(src);
+        if (jwt) {
+          // JWT: giải riêng header / payload (Base64URL), chữ ký giữ nguyên — không kiểm tra chữ ký
+          const fmtTime = (d) => d.toLocaleString('vi-VN', { hour12: false });
+          const lines = ['// Header', JSON.stringify(jwt.header, null, 2), '', '// Payload',
+            jwt.payloadText ?? JSON.stringify(jwt.payload, null, 2)];
+          if (jwt.times.length) {
+            lines.push('', '// Thời gian (giờ máy)');
+            for (const [k, d] of jwt.times) lines.push(`${k.padEnd(4)} = ${fmtTime(d)}`);
+          }
+          lines.push('', `// Chữ ký (${jwt.header.alg}, chưa kiểm tra)`, jwt.signature || '(không có — JWT không ký)');
+          ct.out = lines.join('\n');
+          ct.output.textContent = ct.out;
+          const exp = jwt.times.find(([k]) => k === 'exp')?.[1];
+          const left = exp ? exp - Date.now() : null;
+          const expText = left == null ? '' : left <= 0 ? ' · đã hết hạn' : ` · còn hạn ${left < 3600e3 ? Math.ceil(left / 60e3) + ' phút' : left < 86400e3 ? Math.floor(left / 3600e3) + ' giờ' : Math.floor(left / 86400e3) + ' ngày'}`;
+          ct.outInfo.textContent = `JWT · ${jwt.header.alg}${expText}`;
+          ct.copy.disabled = false;
+          ct.use.disabled = false;
+          return;
+        }
         const bytes = base64ToBytes(src);
         const decoded = utf8Text(bytes);
         ct.outBytes = bytes;

@@ -48,13 +48,27 @@ export function bytesToBase64(bytes, { urlSafe = false, wrap = false } = {}) {
   return b64;
 }
 
+/** Bỏ phần bao quanh hay dính khi copy: nháy '…' "…" `…`, dấu ":" / "=" ở đầu, "Bearer ", tiền tố data:...;base64, */
+export function cleanBase64Input(input) {
+  let s = String(input).trim();
+  for (let prev; prev !== s;) {
+    prev = s;
+    s = s.replace(/^[:=,;]\s*/, '').replace(/[,;]$/, '').trim();
+    if (/^(['"`]).*\1$/s.test(s) && s.length >= 2) s = s.slice(1, -1).trim();
+  }
+  return s.replace(/^Bearer\s+/i, '').replace(/^data:[^,]*;base64,/i, '');
+}
+
 /** Giải Base64: chấp nhận Base64URL (-_), thiếu dấu "=", có xuống dòng / khoảng trắng, tiền tố data:...;base64, */
 export function base64ToBytes(input) {
-  let s = String(input).trim().replace(/^data:[^,]*;base64,/i, '').replace(/\s+/g, '');
+  let s = cleanBase64Input(input).replace(/\s+/g, '');
   if (!s) return new Uint8Array();
   s = s.replace(/-/g, '+').replace(/_/g, '/');
   const bad = s.search(/[^A-Za-z0-9+/=]/);
-  if (bad >= 0) throw new CryptoToolError(`Ký tự không hợp lệ trong Base64: "${s[bad]}" (vị trí ${bad + 1})`);
+  if (bad >= 0) {
+    const hint = s[bad] === '.' ? ' — chuỗi có dấu "." thường là JWT (header.payload.chữ ký), kiểm tra lại đủ 3 phần' : '';
+    throw new CryptoToolError(`Ký tự không hợp lệ trong Base64: "${s[bad]}" (vị trí ${bad + 1})${hint}`);
+  }
   if (/=[^=]/.test(s)) throw new CryptoToolError('Dấu "=" chỉ được nằm ở cuối chuỗi Base64');
   s = s.replace(/=+$/, '');
   if (s.length % 4 === 1) throw new CryptoToolError('Độ dài chuỗi Base64 không hợp lệ (thừa 1 ký tự)');
@@ -63,6 +77,36 @@ export function base64ToBytes(input) {
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
+}
+
+// ---------- JWT (header.payload.chữ ký, mỗi phần Base64URL) ----------
+const JWT_TIME_CLAIMS = ['iat', 'nbf', 'exp', 'auth_time', 'updated_at'];
+
+/** Giải JWT / JWS dạng compact; trả null nếu chuỗi không phải JWT (header phải là JSON có "alg") */
+export function decodeJwt(input) {
+  const s = cleanBase64Input(input).replace(/\s+/g, '');
+  const parts = s.split('.');
+  if (parts.length !== 3 || parts.some((p, i) => (i < 2 ? !p : false) || /[^A-Za-z0-9_\-+/=]/.test(p))) return null;
+  const json = (p) => {
+    const text = utf8Text(base64ToBytes(p));
+    if (text == null) return undefined;
+    try { return JSON.parse(text); } catch { return undefined; }
+  };
+  let header, payload;
+  try { header = json(parts[0]); } catch { return null; }
+  if (!header || typeof header !== 'object' || typeof header.alg !== 'string') return null;
+  let payloadText = null;
+  try {
+    payload = json(parts[1]);
+    if (payload === undefined) payloadText = utf8Text(base64ToBytes(parts[1]));
+  } catch (err) {
+    throw new CryptoToolError(`JWT: phần payload không giải được — ${err.message}`);
+  }
+  const times = [];
+  if (payload && typeof payload === 'object') {
+    for (const k of JWT_TIME_CLAIMS) if (Number.isFinite(payload[k])) times.push([k, new Date(payload[k] * 1000)]);
+  }
+  return { header, payload, payloadText, signature: parts[2], times };
 }
 
 // ---------- Băm ----------
