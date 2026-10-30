@@ -389,19 +389,27 @@ export function parseQuery(text, opts = {}) {
 // Giá trị không có nháy, có thể chứa khoảng trắng, dấu ":" hoặc dấu phẩy ("Fri Oct 30 09:56:10 ICT 2026"):
 // chỉ tách trường tại ", " khi phía sau là "tênTrường=" — nhờ vậy giá trị nhiều chữ vẫn giữ nguyên.
 const JAVA_KEY = String.raw`[\p{L}_$][\p{L}\p{N}_$.\-]*`;
-const JAVA_START_RE = new RegExp(String.raw`(?:${JAVA_KEY}\s*)?[({]\s*${JAVA_KEY}\s*=`, 'u');
-const JAVA_NEXT_FIELD_RE = new RegExp(String.raw`^,\s*${JAVA_KEY}\s*=`, 'u');
+// Thân object sau dấu mở: "key=" hoặc chuỗi lớp cha lồng nhau trước đó (toString gọi super.toString():
+// Con{Cha{ÔngBà{a=1}, b=2}, c=3})
+const JAVA_BODY = String.raw`(?:\s*${JAVA_KEY}\s*[({])*\s*${JAVA_KEY}\s*=`;
+const JAVA_START_RE = new RegExp(String.raw`(?:${JAVA_KEY}\s*)?[({](?=${JAVA_BODY})`, 'u');
+// Trường kế tiếp: ", key=" hoặc ", Cha{key=…}" (phần lớp cha đặt sau các trường)
+const JAVA_NEXT_FIELD_RE = new RegExp(String.raw`^,\s*(?:${JAVA_KEY}\s*=|${JAVA_KEY}\s*[({](?=${JAVA_BODY}))`, 'u');
 
 export function looksLikeJavaToString(text) {
   const t = text.trim();
-  // Có "key=" ngay sau dấu mở và không phải JSON (không có "key":)
-  return JAVA_START_RE.test(t) && !/"[^"\n]*"\s*:/.test(t);
+  // Có "key=" sau dấu mở và không phải JSON: "key": (nếu có) chỉ được nằm bên trong, sau chỗ bắt đầu object Java
+  // (vd. appInfo={"versionApp":"5"} là giá trị JSON lồng trong toString)
+  const m = JAVA_START_RE.exec(t);
+  if (!m) return false;
+  const json = /"[^"\n]*"\s*:/.exec(t);
+  return !json || json.index > m.index;
 }
 
 export function parseJavaToString(text, opts = {}) {
   const src = text;
   // Bỏ phần chữ log đứng trước ("INFO ... response={...}"): bắt đầu từ object đầu tiên
-  const m = src.match(new RegExp(String.raw`(?:${JAVA_KEY}\s*)?[({](?=\s*${JAVA_KEY}\s*=)|[({]\s*[)}]`, 'u'));
+  const m = src.match(new RegExp(String.raw`(?:${JAVA_KEY}\s*)?[({](?=${JAVA_BODY})|[({]\s*[)}]`, 'u'));
   let i = m ? m.index : src.search(/[[{(]/);
   if (i < 0) throw new ConvertError('Không tìm thấy dấu mở { ( [ của đối tượng Java');
   const pos = (at = i) => {
@@ -460,10 +468,10 @@ export function parseJavaToString(text, opts = {}) {
     if (c === '[') return list();
     if (c === '{' || c === '(') {
       const rest = src.slice(i + 1);
-      if (new RegExp(String.raw`^\s*${JAVA_KEY}\s*=`, 'u').test(rest) || /^\s*[)}]/.test(rest)) return object();
+      if (new RegExp(String.raw`^${JAVA_BODY}`, 'u').test(rest) || /^\s*[)}]/.test(rest)) return object();
     }
     // Tên lớp ngay trước dấu mở: Item(x=1) / Item{x=1}
-    const cls = src.slice(i).match(new RegExp(String.raw`^${JAVA_KEY}\s*(?=[({]\s*(?:${JAVA_KEY}\s*=|[)}]))`, 'u'));
+    const cls = src.slice(i).match(new RegExp(String.raw`^${JAVA_KEY}\s*(?=[({](?:${JAVA_BODY}|\s*[)}]))`, 'u'));
     if (cls) { i += cls[0].length; return object(); }
     return scalar(readRaw(closer, inObject));
   }
@@ -478,12 +486,30 @@ export function parseJavaToString(text, opts = {}) {
       if (src[i] === closer) { i++; return obj; }
       if (i >= src.length) fail(`Thiếu dấu đóng "${closer}"`);
       const km = src.slice(i).match(new RegExp(String.raw`^(${JAVA_KEY})\s*=`, 'u'));
+      if (!km && new RegExp(String.raw`^(?:${JAVA_KEY}\s*)?[({](?:${JAVA_BODY}|\s*[)}])`, 'u').test(src.slice(i))) {
+        // Phần toString của lớp cha không có tên trường (Con{Cha{a=1}, b=2}): gộp các trường vào object hiện tại,
+        // vì đó là trường kế thừa của chính object này
+        const at = i;
+        const inherited = value(closer, true);
+        if (!inherited || typeof inherited !== 'object' || Array.isArray(inherited)) fail('Phần lớp cha không phải object', at);
+        for (const [k, v] of Object.entries(inherited)) if (!(k in obj)) obj[k] = v;
+        ws();
+        if (src[i] === ',') i++;
+        else if (src[i] !== closer) fail(`Thiếu dấu phẩy hoặc "${closer}" sau phần lớp cha`);
+        continue;
+      }
       if (!km) fail(`Cần "tênTrường=" nhưng gặp "${src.slice(i, i + 15)}"`);
       i += km[0].length;
       // Giá trị rỗng: "key=," hoặc "key=}"
       const after = src.slice(i).match(/^[ \t]*/)[0].length;
       if (src[i + after] === ',' || src[i + after] === closer) { obj[km[1]] = ''; i += after; }
-      else obj[km[1]] = value(closer, true);
+      else {
+        const v = value(closer, true);
+        // Lombok @ToString(callSuper = true): Con(super=Cha(a=1), b=2) -> gộp trường lớp cha như trên
+        if (km[1] === 'super' && v && typeof v === 'object' && !Array.isArray(v)) {
+          for (const [k, x] of Object.entries(v)) if (!(k in obj)) obj[k] = x;
+        } else obj[km[1]] = v;
+      }
       ws();
       if (src[i] === ',') i++;
       else if (src[i] !== closer) fail(`Thiếu dấu phẩy hoặc "${closer}" sau trường "${km[1]}"`);
