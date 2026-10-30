@@ -1,0 +1,60 @@
+{
+  "name": "convertsrs-desktop",
+  "productName": "convertSRS",
+  "version": "1.0.0",
+  "description": "Đọc tài liệu SRS dạng Markdown, xuất PDF/TXT (sơ đồ Mermaid dạng vector) — ứng dụng desktop",
+  "author": "Nguyễn Sỹ Quang <quangns1203@gmail.com>",
+  "homepage": "https://github.com/quangns/readmd",
+  "private": true,
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "prepare-app": "node scripts/prepare.js",
+    "icon": "node scripts/make-icon.js",
+    "start": "npm run prepare-app && electron .",
+    "dist:win": "npm run prepare-app && electron-builder --win dir --x64 && node scripts/make-installer.js",
+    "dist:linux": "npm run prepare-app && electron-builder --linux dir"
+  },
+  "devDependencies": {
+    "electron": "45.1.0",
+    "electron-builder": "26.0.12",
+    "resedit": "3.1.0"
+  },
+  "build": {
+    "appId": "vn.vnpt.convertsrs",
+    "productName": "convertSRS",
+    "copyright": "© 2026 Nguyễn Sỹ Quang",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.cjs",
+      "package.json",
+      "bundle/**/*"
+    ],
+    "asar": true,
+    "afterPack": "scripts/after-pack.cjs",
+    "win": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false,
+      "executableName": "convertSRS"
+    },
+    "linux": {
+      "target": [
+        "dir"
+      ],
+      "icon": "build/icon.png",
+      "category": "Office"
+    }
+  }
+}

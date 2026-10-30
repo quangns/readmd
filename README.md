@@ -94,3 +94,27 @@ Thêm `?format=raw` để nhận lại nguyên văn Markdown (`text/markdown; ch
 ### `POST /api/pdf`
 
 Body JSON: `{ html, title, options: { format, landscape, cover, toc, pageNumbers }, meta: { fileName, exportedAt, headings } }`. `html` là phần thân tài liệu đã render (sơ đồ đã là SVG), trang web tự gửi khi bấm **Tải PDF**. Khi in, Chromium tắt JavaScript và chặn mọi request mạng ra ngoài.
+
+## Ứng dụng Windows (desktop)
+
+Thư mục `desktop/` đóng gói giao diện này thành ứng dụng Windows bằng **Electron**: tạo PDF ngay trên máy bằng `printToPDF` (không cần server, không cần mạng, không giới hạn 4.5 MB như bản Vercel).
+
+**Cài đặt:** tải `convertSRS-Setup-<phiên bản>.exe` ở mục [Releases](https://github.com/quangns/readmd/releases) rồi chạy.
+
+- Cài cho người dùng hiện tại (`%LOCALAPPDATA%\Programs\convertSRS`), không cần quyền Admin; được chọn thư mục cài.
+- Tạo shortcut Desktop và Start Menu; gỡ trong *Settings → Apps* như ứng dụng thường.
+- Gắn với file `.md` / `.markdown`: có trong "Mở bằng"; nếu máy chưa có ứng dụng mặc định cho `.md` thì nhấp đúp sẽ mở bằng convertSRS. Muốn đặt làm mặc định: chuột phải file `.md` → *Open with → Choose another app → convertSRS → Always*.
+- Mở file thứ hai khi ứng dụng đang chạy: hiển thị trong cửa sổ đang mở.
+- Menu: **Tệp** (Mở… `Ctrl+O`, Mở gần đây, Xuất PDF `Ctrl+Shift+E`, Xuất TXT `Ctrl+Shift+T`, In `Ctrl+P`), **Xem** (`Ctrl+1…4` chuyển tab, phóng to/thu nhỏ).
+- Bộ cài chưa ký số (code signing): lần đầu chạy Windows SmartScreen có thể cảnh báo → *More info → Run anyway*.
+
+**Build bộ cài** (chạy được trên Linux/macOS/Windows, không cần Wine):
+
+```bash
+cd desktop
+npm install
+npm run dist:win     # -> desktop/dist/convertSRS-Setup-<version>.exe
+npm start            # chạy thử ứng dụng desktop
+```
+
+`dist:win` = chuẩn bị tài nguyên (`scripts/prepare.js`) → `electron-builder --win dir` (gắn icon + thông tin phiên bản bằng `resedit` trong `scripts/after-pack.cjs`) → biên dịch bộ cài NSIS `installer/convertsrs.nsi` (`scripts/make-installer.js`). Đổi logo: sửa SVG trong `scripts/make-icon.js` rồi `npm run icon`. Tăng phiên bản: sửa `version` trong `desktop/package.json`.

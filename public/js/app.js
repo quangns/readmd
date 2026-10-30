@@ -65,7 +65,8 @@ $$('[data-theme-option]').forEach((b) => b.addEventListener('click', () => {
 }));
 darkQuery.addEventListener('change', () => { if (themeMode() === 'system') applyTheme(); });
 
-const PDF_BODY_LIMIT = 4.3 * 1024 * 1024; // Vercel giới hạn request 4.5 MB
+// Vercel giới hạn request 4.5 MB; bản desktop tạo PDF ngay trên máy nên không giới hạn
+const PDF_BODY_LIMIT = window.desktop ? Infinity : 4.3 * 1024 * 1024;
 
 // ---------- Mermaid ----------
 const FONT = "'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif";
@@ -1175,3 +1176,28 @@ function formatBytes(n) {
 }
 
 applyTheme();
+
+// ---------- Bản desktop (Electron) ----------
+// Mở file từ hệ điều hành (nhấp đúp .md, "Mở bằng", menu Tệp > Mở) và các lệnh từ menu ứng dụng
+if (window.desktop) {
+  document.documentElement.classList.add('is-desktop');
+  window.desktop.onOpenFile(async ({ name, size, content }) => {
+    showSkeleton();
+    await loadMarkdown(content, { name, size, source: 'file' });
+    activateTab('preview');
+  });
+  window.desktop.onMenu((action) => {
+    if (action.startsWith('tab:')) return activateTab(action.slice(4));
+    if (action === 'sample') return $('#btnSample').click();
+    if (action === 'print-options') return openPrintMenu();
+    if (!state.markdown) return toast('Hãy mở một tài liệu trước.');
+    if (action === 'pdf') el.btnPdf.click();
+    else if (action === 'txt') el.btnTxt.click();
+    else if (action === 'print') printFallback();
+  });
+  // Nút "Chọn file" dùng hộp thoại của hệ điều hành để nhớ được đường dẫn file
+  for (const b of [$('#btnEmptyOpen'), $('#btnQuickOpen')]) {
+    b.addEventListener('click', (e) => { e.stopImmediatePropagation(); window.desktop.openDialog(); }, true);
+  }
+  window.desktop.ready();
+}
