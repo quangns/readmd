@@ -121,6 +121,7 @@
         <button class="tab" role="tab" data-tab="raw" aria-selected="false">Markdown gốc</button>
         <button class="tab" role="tab" data-tab="source" aria-selected="false">Soạn / Dán</button>
         <button class="tab" role="tab" data-tab="text" aria-selected="false">Bản TXT</button>
+        <button class="tab" role="tab" data-tab="json" aria-selected="false">Text → JSON</button>
         <span class="tabs__status" id="status" aria-live="polite"></span>
       </div>
 
@@ -186,6 +187,56 @@
       <section class="pane" data-pane="text">
         <div class="paper paper--text">
           <pre class="txt-preview" id="txtPreview">Chưa có tài liệu.</pre>
+        </div>
+      </section>
+
+      <section class="pane" data-pane="json">
+        <div class="t2j">
+          <div class="t2j__bar">
+            <label class="field field--inline">
+              <span class="field__label">Định dạng đầu vào</span>
+              <select id="t2jFormat"></select>
+            </label>
+            <label class="field field--inline">
+              <span class="field__label">Thụt lề</span>
+              <select id="t2jIndent">
+                <option value="2">2 dấu cách</option>
+                <option value="4">4 dấu cách</option>
+                <option value="tab">Tab</option>
+                <option value="0">Thu gọn 1 dòng</option>
+              </select>
+            </label>
+            <label class="check check--sm" title="Đổi &quot;12&quot; thành số 12, &quot;true&quot; thành true… Bỏ chọn để giữ mọi giá trị là chuỗi">
+              <input type="checkbox" id="t2jTyped" checked> Tự nhận kiểu số / true / false
+            </label>
+            <label class="field field--inline t2j__from">
+              <span class="field__label">Lấy từ tài liệu</span>
+              <select id="t2jFromDoc"><option value="">— Chọn khối mã / bảng —</option></select>
+            </label>
+          </div>
+          <div class="t2j__grid">
+            <div class="t2j__col">
+              <div class="t2j__head">
+                <span class="t2j__title">Đoạn text</span>
+                <div class="t2j__tools">
+                  <button class="btn btn--ghost btn--sm" id="t2jPaste">Dán</button>
+                  <button class="btn btn--ghost btn--sm" id="t2jSample">Ví dụ</button>
+                  <button class="btn btn--ghost btn--sm" id="t2jClear">Xoá</button>
+                </div>
+              </div>
+              <textarea id="t2jInput" spellcheck="false" placeholder="Dán đoạn text cần chuyển:&#10;• JSON / JS object (có comment, nháy đơn, dấu phẩy thừa)&#10;• key: value hoặc key = value (thụt lề để lồng nhau)&#10;• Bảng Markdown / CSV / TSV (dán từ Excel)&#10;• Bảng mô tả field: Field | Type | M/O | …&#10;• Query string: a=1&amp;b=2"></textarea>
+            </div>
+            <div class="t2j__col">
+              <div class="t2j__head">
+                <span class="t2j__title">JSON <span class="t2j__status" id="t2jStatus"></span></span>
+                <div class="t2j__tools">
+                  <button class="btn btn--ghost btn--sm" id="t2jCopy" disabled>Sao chép</button>
+                  <button class="btn btn--primary btn--sm" id="t2jDownload" disabled>Tải .json</button>
+                </div>
+              </div>
+              <pre class="t2j__output" id="t2jOutput"><span class="muted">Kết quả hiện ở đây.</span></pre>
+            </div>
+          </div>
         </div>
       </section>
     </main>

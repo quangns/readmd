@@ -1,6 +1,7 @@
 // convertSRS — đọc Markdown, xem trực tiếp hoặc xuất PDF / TXT.
 // Thư viện marked, DOMPurify, hljs, mermaid được nạp dạng global từ /vendor.
 import { diagramInfo, toText, slugger, splitFrontmatter, flowchartToSequence, liftDiagramCaptions } from './srs-core.js';
+import { FORMATS as T2J_FORMATS, convertToJson } from './text2json.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -269,6 +270,7 @@ async function render() {
   buildToc(headings, diagrams);
   renderRaw();
   renderTxt();
+  refreshT2jSources();
   setStatus(`${headings.length} mục · ${diagrams.length} sơ đồ · đang vẽ…`);
 
   // Vẽ lần lượt từng sơ đồ; bỏ dở nếu đã có lượt render mới
@@ -1176,6 +1178,114 @@ function formatBytes(n) {
 }
 
 applyTheme();
+
+// ---------- Tab Text -> JSON ----------
+const t2j = {
+  input: $('#t2jInput'), output: $('#t2jOutput'), status: $('#t2jStatus'),
+  format: $('#t2jFormat'), indent: $('#t2jIndent'), typed: $('#t2jTyped'), fromDoc: $('#t2jFromDoc'),
+  copy: $('#t2jCopy'), download: $('#t2jDownload'), json: '',
+};
+for (const [value, label] of Object.entries(T2J_FORMATS)) t2j.format.add(new Option(label, value));
+const T2J_SAMPLE = `// Request
+{ "email": "partner_email", "password": 'partner_password', clientId: "your_client_id",
+  "expAccess": 3600, "expRefresh": 84600, }
+// Response
+{ "accessToken": "eyJhbGciOiJIUzI1NiIs...", "refreshToken": "refresh_token_string", "userId": "user_id_string" }`;
+
+function runT2j() {
+  const text = t2j.input.value;
+  t2j.json = '';
+  t2j.output.classList.remove('is-error');
+  t2j.status.classList.remove('is-error');
+  if (!text.trim()) {
+    t2j.output.innerHTML = '<span class="muted">Kết quả hiện ở đây.</span>';
+    t2j.status.textContent = '';
+  } else {
+    try {
+      const { value, format } = convertToJson(text, { format: t2j.format.value, typed: t2j.typed.checked });
+      const ind = t2j.indent.value === 'tab' ? '\t' : Number(t2j.indent.value);
+      t2j.json = JSON.stringify(value, null, ind);
+      t2j.output.innerHTML = hljs.highlight(t2j.json, { language: 'json' }).value;
+      const count = Array.isArray(value) ? `${value.length} phần tử` : value && typeof value === 'object' ? `${Object.keys(value).length} trường` : '';
+      t2j.status.textContent = `${t2j.format.value === 'auto' ? 'nhận diện: ' : ''}${T2J_FORMATS[format]}${count ? ' · ' + count : ''}`;
+    } catch (err) {
+      t2j.output.classList.add('is-error');
+      t2j.output.textContent = err.message;
+      t2j.status.textContent = 'lỗi';
+      t2j.status.classList.add('is-error');
+    }
+  }
+  t2j.copy.disabled = t2j.download.disabled = !t2j.json;
+}
+let t2jTimer;
+t2j.input.addEventListener('input', () => { clearTimeout(t2jTimer); t2jTimer = setTimeout(runT2j, 250); });
+for (const c of [t2j.format, t2j.indent, t2j.typed]) c.addEventListener('change', runT2j);
+// Tab trong ô nhập: chèn tab thay vì chuyển focus (dán dữ liệu TSV / thụt lề)
+t2j.input.addEventListener('keydown', (e) => {
+  if (e.key !== 'Tab' || e.shiftKey) return;
+  e.preventDefault();
+  t2j.input.setRangeText('  ', t2j.input.selectionStart, t2j.input.selectionEnd, 'end');
+  t2j.input.dispatchEvent(new Event('input'));
+});
+$('#t2jSample').addEventListener('click', () => { t2j.input.value = T2J_SAMPLE; runT2j(); });
+$('#t2jClear').addEventListener('click', () => { t2j.input.value = ''; runT2j(); t2j.input.focus(); });
+$('#t2jPaste').addEventListener('click', async () => {
+  try {
+    t2j.input.value = await navigator.clipboard.readText();
+    runT2j();
+  } catch {
+    toast('Trình duyệt chặn đọc clipboard — hãy dán (Ctrl+V) vào ô bên trái.', true);
+    t2j.input.focus();
+  }
+});
+t2j.copy.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(t2j.json);
+    toast('Đã sao chép JSON.');
+  } catch {
+    toast('Trình duyệt không cho phép sao chép.', true);
+  }
+});
+t2j.download.addEventListener('click', () => {
+  const name = `${baseName(state.fileName) || 'du-lieu'}.json`;
+  downloadBlob(new Blob([t2j.json + '\n'], { type: 'application/json;charset=utf-8' }), name);
+});
+
+// "Lấy từ tài liệu": khối mã và bảng trong tài liệu đang mở
+let t2jBlocks = [];
+function refreshT2jSources() {
+  t2jBlocks = [];
+  if (state.markdown) {
+    const walk = (tokens) => {
+      for (const t of tokens) {
+        if (t.type === 'code' && !/^mermaid/i.test(t.lang || '')) t2jBlocks.push({ kind: 'code', lang: (t.lang || '').trim(), text: t.text });
+        else if (t.type === 'table') t2jBlocks.push({ kind: 'table', text: t.raw, head: t.header.map((h) => h.text).join(' | ') });
+        if (t.tokens && t.type !== 'table') walk(t.tokens);
+        if (t.items) t.items.forEach((it) => walk(it.tokens || []));
+      }
+    };
+    walk(marked.lexer(splitFrontmatter(state.markdown).body));
+  }
+  t2j.fromDoc.replaceChildren(new Option(t2jBlocks.length ? '— Chọn khối mã / bảng —' : '— Tài liệu chưa có khối mã / bảng —', ''));
+  let nc = 0;
+  let nt = 0;
+  t2jBlocks.forEach((b, k) => {
+    // Dòng đầu tiên có chữ (bỏ qua dòng chỉ có dấu ngoặc / comment) để nhận ra khối mã
+    const first = b.kind === 'code'
+      ? (b.text.split('\n').find((l) => /[\p{L}\p{N}]/u.test(l) && !/^\s*\/\//.test(l)) || b.text.split('\n')[0]).trim()
+      : b.head;
+    const label = b.kind === 'code' ? `Khối mã ${++nc}${b.lang ? ` (${b.lang})` : ''} — ${first.trim()}` : `Bảng ${++nt} — ${first}`;
+    t2j.fromDoc.add(new Option(label.length > 80 ? label.slice(0, 79) + '…' : label, String(k)));
+  });
+}
+t2j.fromDoc.addEventListener('change', () => {
+  const b = t2jBlocks[Number(t2j.fromDoc.value)];
+  if (!b) return;
+  t2j.input.value = b.text;
+  t2j.format.value = 'auto';
+  runT2j();
+  t2j.fromDoc.value = '';
+});
 
 // ---------- Bản desktop (Electron) ----------
 // Mở file từ hệ điều hành (nhấp đúp .md, "Mở bằng", menu Tệp > Mở) và các lệnh từ menu ứng dụng
