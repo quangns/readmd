@@ -254,13 +254,16 @@
 
       <section class="pane" data-pane="crypto">
         <div class="t2j ct">
-          <div class="t2j__bar">
+          <!-- Hàng 1: chọn chế độ (cố định) · Hàng 2: tuỳ chọn (chiều cao cố định) · Hàng 3: ghi chú -->
+          <div class="ct-modes">
             <div class="segmented segmented--mode" role="radiogroup" aria-label="Chế độ">
               <button class="segmented__item is-active" role="radio" aria-checked="true" data-ct-mode="hash">SHA-256 / băm</button>
               <button class="segmented__item" role="radio" aria-checked="false" data-ct-mode="b64enc">Mã hoá Base64</button>
               <button class="segmented__item" role="radio" aria-checked="false" data-ct-mode="b64dec">Giải mã Base64</button>
               <button class="segmented__item" role="radio" aria-checked="false" data-ct-mode="keygen">Sinh cặp khoá</button>
             </div>
+          </div>
+          <div class="ct-optrow">
             <span class="ct-opts" data-ct-for="hash">
               <label class="field field--inline">
                 <span class="field__label">Thuật toán</span>
@@ -279,7 +282,7 @@
               <label class="check check--sm"><input type="checkbox" id="ctUrlSafe"> Base64URL (thay +/ bằng -_, bỏ =)</label>
               <label class="check check--sm"><input type="checkbox" id="ctWrap"> Ngắt dòng mỗi 76 ký tự</label>
             </span>
-            <span class="ct-opts ct-note" data-ct-for="b64dec" hidden>Tự nhận Base64URL, thiếu dấu "=", xuống dòng, tiền tố data:…;base64,</span>
+            <span class="ct-opts ct-opts--empty" data-ct-for="b64dec" hidden></span>
             <span class="ct-opts" data-ct-for="keygen" hidden>
               <label class="field field--inline"><span class="field__label">Phương thức</span><select id="kgAlgo"></select></label>
               <label class="field field--inline"><span class="field__label">Độ dài / đường cong</span><select id="kgSize"></select></label>
@@ -289,8 +292,10 @@
             </span>
           </div>
           <p class="ct-hint" data-ct-for="hash">SHA là hàm băm một chiều: dùng để tạo / đối chiếu chữ ký, <strong>không giải mã ngược được</strong>. Văn bản được băm theo UTF-8.</p>
+          <p class="ct-hint" data-ct-for="b64enc" hidden>Mã hoá văn bản (UTF-8) hoặc file sang Base64. Base64 chỉ là cách biểu diễn dữ liệu, <strong>không phải mã hoá bảo mật</strong>.</p>
+          <p class="ct-hint" data-ct-for="b64dec" hidden>Tự nhận Base64URL, chuỗi thiếu dấu "=", có xuống dòng hoặc tiền tố data:…;base64,. Dữ liệu nhị phân hiện dạng hex và tải về được.</p>
+          <p class="ct-hint" data-ct-for="keygen" hidden>Khoá được sinh ngay trên máy bằng WebCrypto, không gửi đi đâu. <strong>Giữ bí mật khoá bí mật</strong> — chỉ chia sẻ khoá công khai.</p>
           <div class="kg" data-ct-for="keygen" hidden>
-            <p class="ct-hint">Khoá được sinh ngay trên máy bằng WebCrypto, không gửi đi đâu. <strong>Giữ bí mật khoá bí mật</strong> — chỉ chia sẻ khoá công khai.</p>
             <div class="kg-info" id="kgInfo" hidden></div>
             <div class="t2j__grid">
               <div class="t2j__col" id="kgPublicCol">

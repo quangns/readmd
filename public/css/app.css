@@ -451,7 +451,20 @@ html[data-theme='dark'] .kg-info .is-ok { color: #4ADE80; }
 .kg-out.is-pem { white-space: pre; word-break: normal; overflow-x: auto; }
 .kg-out.is-busy { opacity: 0.5; }
 .segmented--mode .segmented__item { padding: 0 0.9rem; min-height: 36px; }
+.ct-modes { display: flex; }
+/* Hàng tuỳ chọn cao cố định bằng một ô có nhãn: chuyển chế độ không làm nội dung bên dưới nhảy */
+.ct-optrow { display: flex; align-items: flex-end; min-height: 64px; }
 .ct-opts { display: inline-flex; flex-wrap: wrap; align-items: end; gap: 0.75rem 1.25rem; }
+.ct-opts .check { min-height: 38px; }
+/* Sinh cặp khoá: 4 ô chọn chia đều một hàng + nút, không gãy dòng trên màn laptop */
+@media (min-width: 641px) {
+  .ct-optrow .ct-opts[data-ct-for='keygen'] { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; align-items: end; width: 100%; }
+  .ct-optrow .ct-opts[data-ct-for='keygen'][hidden] { display: none; }
+  .ct-opts[data-ct-for='keygen'] select { min-width: 0; width: 100%; }
+  /* Mục đích chỉ có với RSA: giữ chỗ để các ô khác không đổi vị trí */
+  .ct-opts[data-ct-for='keygen'] #kgPurposeField[hidden] { display: grid !important; visibility: hidden; }
+}
+.ct-hint { min-height: 1.5em; }
 .ct-opts[hidden] { display: none; }
 .ct-key input {
   height: 38px; min-width: 240px; padding: 0 0.6rem;
@@ -459,7 +472,7 @@ html[data-theme='dark'] .kg-info .is-ok { color: #4ADE80; }
   background: var(--paper); color: var(--ink); font-family: var(--font-mono); font-size: 0.8125rem;
 }
 .ct-note { font-size: 0.78rem; color: var(--ink-2); align-self: center; }
-.ct-hint { margin: -0.25rem 0 0; font-size: 0.78rem; color: var(--ink-2); }
+.ct-hint { margin: -0.4rem 0 0; font-size: 0.78rem; line-height: 1.5; color: var(--ink-2); }
 .ct-hint[hidden] { display: none; }
 .ct-file { position: relative; display: inline-grid; place-items: center; cursor: pointer; }
 .ct-file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
