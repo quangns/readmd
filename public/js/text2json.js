@@ -6,6 +6,7 @@
 export const FORMATS = {
   auto: 'Tự nhận diện',
   loose: 'JSON / JS object',
+  java: 'Java toString (key=value)',
   kv: 'key: value',
   table: 'Bảng (Markdown / CSV / TSV)',
   fields: 'Bảng field → JSON mẫu',
@@ -382,12 +383,138 @@ export function parseQuery(text, opts = {}) {
   return out;
 }
 
+// ---------- Java toString() ----------
+// Map: {a=1, b={c=2}, list=[x, y]} · Lombok: Order(id=1, item=Item(x=1)) · IntelliJ: Order{name='abc', id=1}
+// Giá trị không có nháy, có thể chứa khoảng trắng, dấu ":" hoặc dấu phẩy ("Fri Oct 30 09:56:10 ICT 2026"):
+// chỉ tách trường tại ", " khi phía sau là "tênTrường=" — nhờ vậy giá trị nhiều chữ vẫn giữ nguyên.
+const JAVA_KEY = String.raw`[\p{L}_$][\p{L}\p{N}_$.\-]*`;
+const JAVA_START_RE = new RegExp(String.raw`(?:${JAVA_KEY}\s*)?[({]\s*${JAVA_KEY}\s*=`, 'u');
+const JAVA_NEXT_FIELD_RE = new RegExp(String.raw`^,\s*${JAVA_KEY}\s*=`, 'u');
+
+export function looksLikeJavaToString(text) {
+  const t = text.trim();
+  // Có "key=" ngay sau dấu mở và không phải JSON (không có "key":)
+  return JAVA_START_RE.test(t) && !/"[^"\n]*"\s*:/.test(t);
+}
+
+export function parseJavaToString(text, opts = {}) {
+  const src = text;
+  // Bỏ phần chữ log đứng trước ("INFO ... response={...}"): bắt đầu từ object đầu tiên
+  const m = src.match(new RegExp(String.raw`(?:${JAVA_KEY}\s*)?[({](?=\s*${JAVA_KEY}\s*=)|[({]\s*[)}]`, 'u'));
+  let i = m ? m.index : src.search(/[[{(]/);
+  if (i < 0) throw new ConvertError('Không tìm thấy dấu mở { ( [ của đối tượng Java');
+  const pos = (at = i) => {
+    const before = src.slice(0, at).split('\n');
+    return [before.length, before[before.length - 1].length + 1];
+  };
+  const fail = (msg, at = i) => { throw new ConvertError(msg, ...pos(at)); };
+  const CLOSE = { '{': '}', '(': ')', '[': ']' };
+  const ws = () => { while (/\s/.test(src[i] || '')) i++; };
+  const scalar = (raw) => {
+    const v = raw.trim();
+    if (/^(["'])[\s\S]*\1$/.test(v) && v.length >= 2) return v.slice(1, -1);
+    if (v === 'null') return null;
+    return typeValue(v, opts);
+  };
+
+  // Đọc giá trị không nháy cho tới dấu kết thúc ở đúng cấp lồng
+  function readRaw(closer, inObject) {
+    const start = i;
+    if (src[i] === "'" || src[i] === '"') {
+      // Chuỗi có nháy (IntelliJ toString): đóng nháy là nháy theo sau bởi "," hoặc dấu đóng
+      const q = src[i];
+      let j = i + 1;
+      while (j < src.length) {
+        if (src[j] === q) {
+          let k = j + 1;
+          while (/\s/.test(src[k] || '')) k++;
+          if (src[k] === ',' || src[k] === closer || k >= src.length) break;
+        }
+        j++;
+      }
+      if (j >= src.length) fail('Chuỗi chưa được đóng nháy', start);
+      i = j + 1;
+      return src.slice(start, i);
+    }
+    let depth = 0;
+    for (; i < src.length; i++) {
+      const c = src[i];
+      if (depth === 0) {
+        if (c === closer) break;
+        if (c === ',') {
+          if (!inObject) break; // trong danh sách: mỗi phần tử cách nhau bởi ", "
+          if (JAVA_NEXT_FIELD_RE.test(src.slice(i, i + 200))) break;
+        }
+      }
+      if (c === '(' || c === '[' || c === '{') depth++;
+      else if ((c === ')' || c === ']' || c === '}') && depth > 0) depth--;
+    }
+    if (i >= src.length) fail(`Thiếu dấu đóng "${closer}"`, start);
+    return src.slice(start, i);
+  }
+
+  function value(closer, inObject) {
+    ws();
+    const c = src[i];
+    if (c === '[') return list();
+    if (c === '{' || c === '(') {
+      const rest = src.slice(i + 1);
+      if (new RegExp(String.raw`^\s*${JAVA_KEY}\s*=`, 'u').test(rest) || /^\s*[)}]/.test(rest)) return object();
+    }
+    // Tên lớp ngay trước dấu mở: Item(x=1) / Item{x=1}
+    const cls = src.slice(i).match(new RegExp(String.raw`^${JAVA_KEY}\s*(?=[({]\s*(?:${JAVA_KEY}\s*=|[)}]))`, 'u'));
+    if (cls) { i += cls[0].length; return object(); }
+    return scalar(readRaw(closer, inObject));
+  }
+
+  function object() {
+    const open = src[i];
+    const closer = CLOSE[open];
+    i++;
+    const obj = {};
+    for (;;) {
+      ws();
+      if (src[i] === closer) { i++; return obj; }
+      if (i >= src.length) fail(`Thiếu dấu đóng "${closer}"`);
+      const km = src.slice(i).match(new RegExp(String.raw`^(${JAVA_KEY})\s*=`, 'u'));
+      if (!km) fail(`Cần "tênTrường=" nhưng gặp "${src.slice(i, i + 15)}"`);
+      i += km[0].length;
+      // Giá trị rỗng: "key=," hoặc "key=}"
+      const after = src.slice(i).match(/^[ \t]*/)[0].length;
+      if (src[i + after] === ',' || src[i + after] === closer) { obj[km[1]] = ''; i += after; }
+      else obj[km[1]] = value(closer, true);
+      ws();
+      if (src[i] === ',') i++;
+      else if (src[i] !== closer) fail(`Thiếu dấu phẩy hoặc "${closer}" sau trường "${km[1]}"`);
+    }
+  }
+
+  function list() {
+    i++;
+    const arr = [];
+    for (;;) {
+      ws();
+      if (src[i] === ']') { i++; return arr; }
+      if (i >= src.length) fail('Thiếu dấu đóng "]"');
+      arr.push(value(']', false));
+      ws();
+      if (src[i] === ',') i++;
+      else if (src[i] !== ']') fail('Thiếu dấu phẩy hoặc "]" trong danh sách');
+    }
+  }
+
+  const result = value(undefined, false);
+  return result;
+}
+
 // ---------- Nhận diện + chuyển ----------
 export function detectFormat(text) {
   const t = text.trim();
   if (!t) return 'auto';
   const lines = t.split('\n').map((l) => l.trim()).filter(Boolean);
   const code = lines.filter((l) => !/^(\/\/|#|\/\*|\*)/.test(l));
+  // Java toString ({a=1}, Order(id=1)) — kiểm tra trước JSON vì cũng bắt đầu bằng "{"
+  if (looksLikeJavaToString(t)) return 'java';
   if (code.length && /^[{[]/.test(code[0])) return 'loose';
   if (lines.filter((l) => l.includes('|')).length >= 2 && lines.some((l) => /^\|?\s*:?-{2,}/.test(l))) {
     return looksLikeFieldTable(t) ? 'fields' : 'table';
@@ -410,6 +537,7 @@ export function convertToJson(text, { format = 'auto', typed = true } = {}) {
   let value;
   switch (fmt) {
     case 'loose': value = parseLoose(text).value; break;
+    case 'java': value = parseJavaToString(text, opts); break;
     case 'kv': value = parseKeyValue(text, opts); break;
     case 'table': value = parseTable(text, opts); break;
     case 'fields': value = parseFieldTable(text); break;
