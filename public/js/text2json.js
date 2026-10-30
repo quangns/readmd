@@ -613,6 +613,12 @@ export function looksLikeLog(text, opts = {}) {
 }
 
 export function parseLog(text, opts = {}) {
+  const records = parseLogRecords(text, opts);
+  return records.length === 1 ? records[0] : records;
+}
+
+/** Các bản ghi log theo thứ tự: chuỗi (dòng không có JSON, giữ nguyên) hoặc { tiền tố: payload } */
+export function parseLogRecords(text, opts = {}) {
   const entries = extractLogEntries(text, opts);
   if (!entries.length) throw new ConvertError('Không tìm thấy JSON / object trong dòng log');
   const { src } = entries;
@@ -627,9 +633,7 @@ export function parseLog(text, opts = {}) {
     if (line) records.push(own.length ? logRecordObject(src, own, from, k) : line);
     from = k + 1;
   }
-  // Một bản ghi: trả object như cũ; nhiều bản ghi: mảng theo thứ tự,
-  // dòng có payload -> { tiền tố: payload }, dòng không parse được giữ nguyên dạng chuỗi
-  return records.length === 1 ? records[0] : records;
+  return records;
 }
 
 // ---------- Nhận diện + chuyển ----------
@@ -676,7 +680,13 @@ export function convertToJson(text, { format = 'auto', typed = true } = {}) {
   switch (fmt) {
     case 'loose': value = parseLoose(text).value; break;
     case 'java': value = parseJavaToString(text, opts); break;
-    case 'log': value = parseLog(text, opts); break;
+    case 'log': {
+      // Nhiều dòng log: trả thêm records để hiển thị theo từng dòng như log gốc
+      const records = parseLogRecords(text, opts);
+      if (records.length > 1) return { value: records, format: fmt, records };
+      value = records[0];
+      break;
+    }
     case 'kv': value = parseKeyValue(text, opts); break;
     case 'table': value = parseTable(text, opts); break;
     case 'fields': value = parseFieldTable(text); break;

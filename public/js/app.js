@@ -1344,10 +1344,21 @@ function prettyJson(value, ind) {
   };
   return ser(value, '');
 }
+// Log nhiều dòng: giữ từng dòng như log gốc, không bọc [ ] / { } ngoài cùng.
+// Dòng không có JSON giữ nguyên văn bản; dòng có JSON -> "tiền tố": JSON (key dài thì JSON xuống dòng, lùi 1 cấp)
+function prettyLog(records, ind) {
+  const unit = typeof ind === 'number' ? ' '.repeat(ind) : ind;
+  return records.flatMap((r) => (typeof r === 'string' ? [r] : Object.entries(r).map(([k, v]) => {
+    const kq = JSON.stringify(k);
+    if (ind && breakAfterKey(k, v)) return `${kq}:\n${unit}${prettyJson(v, ind).replace(/\n/g, `\n${unit}`)}`;
+    return `${kq}: ${prettyJson(v, ind)}`;
+  }))).join('\n');
+}
 
 function runT2j() {
   const text = t2j.input.value;
   t2j.json = '';
+  t2j.records = null;
   t2j.output.classList.remove('is-error');
   t2j.status.classList.remove('is-error');
   $('#jtBar').hidden = true;
@@ -1357,18 +1368,19 @@ function runT2j() {
     t2j.status.textContent = '';
   } else {
     try {
-      const { value, format } = convertToJson(text, { format: t2j.format.value, typed: t2j.typed.checked });
+      const { value, format, records } = convertToJson(text, { format: t2j.format.value, typed: t2j.typed.checked });
       const ind = t2j.indent.value === 'tab' ? '\t' : Number(t2j.indent.value);
-      t2j.json = prettyJson(value, ind);
+      t2j.json = records ? prettyLog(records, ind) : prettyJson(value, ind);
       t2j.value = value;
+      t2j.records = records;
       if (ind === 0 || !value || typeof value !== 'object') {
         // Thu gọn 1 dòng / giá trị đơn: hiện dạng văn bản
         t2j.output.innerHTML = `<div class="code-ln" style="--ln-digits:${Math.max(2, String(t2j.json.split('\n').length).length)}">${numberedHtml(hljs.highlight(t2j.json, { language: 'json' }).value)}</div>`;
         $('#jtBar').hidden = true;
       } else {
-        renderJsonTree(value, ind === '\t' ? 4 : ind);
+        renderJsonTree(value, ind === '\t' ? 4 : ind, records);
       }
-      const count = Array.isArray(value) ? `${value.length} phần tử` : value && typeof value === 'object' ? `${Object.keys(value).length} trường` : '';
+      const count = records ? `${records.length} dòng log` : Array.isArray(value) ? `${value.length} phần tử` : value && typeof value === 'object' ? `${Object.keys(value).length} trường` : '';
       t2j.status.textContent = `${t2j.format.value === 'auto' ? 'nhận diện: ' : ''}${T2J_FORMATS[format]}${count ? ' · ' + count : ''}`;
     } catch (err) {
       t2j.output.classList.add('is-error');
@@ -1384,7 +1396,7 @@ function runT2j() {
 // Mỗi object / mảng là một .jt-node: dòng mở (nút ▾, key, dấu mở, tóm tắt khi thu gọn), các con, dòng đóng.
 // Dựng bằng DOM (textContent), không chèn chuỗi người dùng dạng HTML.
 const JT_MAX_NODES = 20000;
-function renderJsonTree(value, indent) {
+function renderJsonTree(value, indent, records) {
   let count = 0;
   let ln = 0; // số dòng tương ứng JSON.stringify(value, null, indent)
   const h = (tag, cls, text) => {
@@ -1472,7 +1484,20 @@ function renderJsonTree(value, indent) {
   let tree;
   try {
     tree = h('div', 'jt');
-    tree.append(build(value, undefined, [], 0, true));
+    if (records) {
+      // Log nhiều dòng: dòng không có JSON giữ nguyên, dòng có JSON -> "tiền tố": cây JSON
+      for (const r of records) {
+        if (typeof r === 'string') {
+          const raw = h('div', 'jt-line jt-raw', r);
+          raw.dataset.ln = ++ln;
+          tree.append(raw);
+        } else {
+          for (const [k, v] of Object.entries(r)) tree.append(build(v, k, [k], 0, true));
+        }
+      }
+    } else {
+      tree.append(build(value, undefined, [], 0, true));
+    }
     tree.style.setProperty('--ln-digits', String(Math.max(2, String(ln).length)));
   } catch {
     // JSON quá lớn: hiện dạng văn bản để không làm chậm trình duyệt
@@ -1567,8 +1592,10 @@ t2j.copy.addEventListener('click', async () => {
   }
 });
 t2j.download.addEventListener('click', () => {
-  const name = `${baseName(state.fileName) || 'du-lieu'}.json`;
-  downloadBlob(new Blob([t2j.json + '\n'], { type: 'application/json;charset=utf-8' }), name);
+  // Log nhiều dòng có giữ dòng văn bản gốc -> không phải JSON thuần, tải dạng .txt
+  const ext = t2j.records ? 'txt' : 'json';
+  const name = `${baseName(state.fileName) || 'du-lieu'}.${ext}`;
+  downloadBlob(new Blob([t2j.json + '\n'], { type: `${ext === 'json' ? 'application/json' : 'text/plain'};charset=utf-8` }), name);
 });
 
 // "Lấy từ tài liệu": khối mã và bảng trong tài liệu đang mở
