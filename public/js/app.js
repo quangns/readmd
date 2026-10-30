@@ -2,6 +2,7 @@
 // Thư viện marked, DOMPurify, hljs, mermaid được nạp dạng global từ /vendor.
 import { diagramInfo, toText, slugger, splitFrontmatter, flowchartToSequence, liftDiagramCaptions } from './srs-core.js';
 import { FORMATS as T2J_FORMATS, convertToJson } from './text2json.js';
+import { hashBytes, formatDigest, bytesToBase64, base64ToBytes, utf8Bytes, utf8Text, hexDump } from './crypto-tools.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -865,6 +866,8 @@ window.addEventListener('drop', (e) => {
   const file = files.find((f) => MD_FILE_RE.test(f.name)) || files[0];
   if (!file) return;
   if (el.viewer.open) el.viewer.close();
+  // Đang ở tab Mã hoá: file thả vào là dữ liệu cần băm / mã hoá, không phải tài liệu
+  if ($('.pane[data-pane="crypto"]').classList.contains('is-active')) return loadCryptoFile(files[0]);
   if (files.length > 1) toast(`Đã thả ${files.length} file — mở ${file.name}.`);
   readFile(file);
 }, true);
@@ -1433,6 +1436,154 @@ t2j.fromDoc.addEventListener('change', () => {
   t2j.format.value = 'auto';
   runT2j();
   t2j.fromDoc.value = '';
+});
+
+// ---------- Tab Mã hoá / Base64 ----------
+const ct = {
+  mode: 'hash', file: null, out: '', outBytes: null, seq: 0,
+  input: $('#ctInput'), output: $('#ctOutput'), inInfo: $('#ctInInfo'), outInfo: $('#ctOutInfo'),
+  algo: $('#ctAlgo'), fmt: $('#ctDigestFmt'), key: $('#ctKey'), urlSafe: $('#ctUrlSafe'), wrap: $('#ctWrap'),
+  copy: $('#ctCopy'), use: $('#ctUse'), save: $('#ctSave'),
+};
+const fmtBytes = (n) => (n < 1024 ? `${n} byte` : formatBytes(n));
+
+async function runCrypto() {
+  const seq = ++ct.seq;
+  ct.out = '';
+  ct.outBytes = null;
+  ct.output.classList.remove('is-error', 'is-binary');
+  ct.outInfo.classList.remove('is-error');
+  ct.save.hidden = true;
+  const data = ct.file ? ct.file.bytes : null;
+  const text = ct.input.value;
+  ct.inInfo.textContent = ct.file ? fmtBytes(ct.file.bytes.length) : text ? `${fmtBytes(utf8Bytes(text).length)} · ${[...text].length} ký tự` : '';
+  if (!data && !text) {
+    ct.output.innerHTML = '<span class="muted">Kết quả hiện ở đây.</span>';
+    ct.outInfo.textContent = '';
+  } else {
+    try {
+      if (ct.mode === 'hash') {
+        const digest = await hashBytes(ct.algo.value, data || utf8Bytes(text), ct.key.value);
+        if (seq !== ct.seq) return;
+        ct.out = formatDigest(digest, ct.fmt.value);
+        ct.outInfo.textContent = `${ct.key.value ? 'HMAC-' : ''}${ct.algo.value} · ${digest.length * 8} bit`;
+        ct.output.textContent = ct.out;
+      } else if (ct.mode === 'b64enc') {
+        ct.out = bytesToBase64(data || utf8Bytes(text), { urlSafe: ct.urlSafe.checked, wrap: ct.wrap.checked });
+        ct.outInfo.textContent = `${ct.urlSafe.checked ? 'Base64URL' : 'Base64'} · ${ct.out.replace(/\n/g, '').length} ký tự`;
+        ct.output.textContent = ct.out;
+      } else {
+        const src = data ? utf8Text(data) : text;
+        if (src == null) throw new Error('File không phải văn bản Base64.');
+        const bytes = base64ToBytes(src);
+        const decoded = utf8Text(bytes);
+        ct.outBytes = bytes;
+        ct.save.hidden = false;
+        if (decoded != null) {
+          ct.out = decoded;
+          ct.output.textContent = decoded;
+          ct.outInfo.textContent = `văn bản UTF-8 · ${fmtBytes(bytes.length)}`;
+        } else {
+          // Dữ liệu nhị phân (ảnh, file nén…): hiện hex, cho tải về
+          ct.out = toHexString(bytes);
+          ct.output.classList.add('is-binary');
+          ct.output.textContent = hexDump(bytes);
+          ct.outInfo.textContent = `dữ liệu nhị phân${sniffType(bytes) ? ' (' + sniffType(bytes) + ')' : ''} · ${fmtBytes(bytes.length)} — bấm "Tải file"`;
+        }
+      }
+    } catch (err) {
+      if (seq !== ct.seq) return;
+      ct.output.classList.add('is-error');
+      ct.output.textContent = err.message;
+      ct.outInfo.textContent = 'lỗi';
+      ct.outInfo.classList.add('is-error');
+    }
+  }
+  ct.copy.disabled = !ct.out;
+  ct.use.disabled = !ct.out || ct.output.classList.contains('is-binary');
+}
+const toHexString = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+// Nhận dạng vài loại file phổ biến theo chữ ký đầu file (để đặt đuôi khi tải về)
+function sniffType(b) {
+  const sig = (...xs) => xs.every((x, i) => b[i] === x);
+  if (sig(0x89, 0x50, 0x4e, 0x47)) return 'png';
+  if (sig(0xff, 0xd8, 0xff)) return 'jpg';
+  if (sig(0x47, 0x49, 0x46, 0x38)) return 'gif';
+  if (sig(0x25, 0x50, 0x44, 0x46)) return 'pdf';
+  if (sig(0x50, 0x4b, 0x03, 0x04)) return 'zip';
+  if (sig(0x52, 0x49, 0x46, 0x46) && b[8] === 0x57 && b[9] === 0x45) return 'webp';
+  return '';
+}
+
+function setCryptoMode(mode) {
+  ct.mode = mode;
+  $$('[data-ct-mode]').forEach((b) => {
+    const on = b.dataset.ctMode === mode;
+    b.classList.toggle('is-active', on);
+    b.setAttribute('aria-checked', String(on));
+  });
+  $$('[data-ct-for]').forEach((e) => { e.hidden = e.dataset.ctFor !== mode; });
+  ct.input.placeholder = mode === 'b64dec' ? 'Dán chuỗi Base64 cần giải mã…' : 'Nhập hoặc dán văn bản cần xử lý…';
+  runCrypto();
+}
+$$('[data-ct-mode]').forEach((b) => b.addEventListener('click', () => setCryptoMode(b.dataset.ctMode)));
+let ctTimer;
+const ctLater = () => { clearTimeout(ctTimer); ctTimer = setTimeout(runCrypto, 150); };
+ct.input.addEventListener('input', ctLater);
+ct.key.addEventListener('input', ctLater);
+for (const c of [ct.algo, ct.fmt, ct.urlSafe, ct.wrap]) c.addEventListener('change', runCrypto);
+
+function clearCryptoFile() {
+  ct.file = null;
+  $('#ctFileBar').hidden = true;
+  ct.input.disabled = false;
+}
+async function loadCryptoFile(f) {
+  if (!f) return;
+  if (f.size > 50 * 1024 * 1024) return toast('File lớn hơn 50 MB.', true);
+  ct.file = { name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) };
+  $('#ctFileName').textContent = `${f.name} (${fmtBytes(f.size)})`;
+  $('#ctFileBar').hidden = false;
+  ct.input.disabled = true;
+  runCrypto();
+}
+$('#ctFile').addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  loadCryptoFile(f);
+});
+$('#ctFileClear').addEventListener('click', () => { clearCryptoFile(); runCrypto(); ct.input.focus(); });
+$('#ctClear').addEventListener('click', () => { clearCryptoFile(); ct.input.value = ''; runCrypto(); ct.input.focus(); });
+$('#ctPaste').addEventListener('click', async () => {
+  try {
+    clearCryptoFile();
+    ct.input.value = await navigator.clipboard.readText();
+    runCrypto();
+  } catch {
+    toast('Trình duyệt chặn đọc clipboard — hãy dán (Ctrl+V) vào ô bên trái.', true);
+    ct.input.focus();
+  }
+});
+ct.copy.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(ct.out);
+    toast('Đã sao chép kết quả.');
+  } catch {
+    toast('Trình duyệt không cho phép sao chép.', true);
+  }
+});
+ct.use.addEventListener('click', () => {
+  clearCryptoFile();
+  ct.input.value = ct.out;
+  // Vừa mã hoá Base64 thì chuyển sang giải mã (và ngược lại) cho tiện kiểm tra
+  if (ct.mode === 'b64enc') setCryptoMode('b64dec');
+  else if (ct.mode === 'b64dec') setCryptoMode('b64enc');
+  else runCrypto();
+});
+ct.save.addEventListener('click', () => {
+  if (!ct.outBytes) return;
+  const ext = sniffType(ct.outBytes) || (utf8Text(ct.outBytes) != null ? 'txt' : 'bin');
+  downloadBlob(new Blob([ct.outBytes]), `giai-ma-base64.${ext}`);
 });
 
 // ---------- Bản desktop (Electron) ----------

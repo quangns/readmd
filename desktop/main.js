@@ -155,6 +155,7 @@ function buildMenu() {
         { label: 'Soạn / Dán', accelerator: 'CmdOrCtrl+3', click: () => sendMenu('tab:source') },
         { label: 'Bản TXT', accelerator: 'CmdOrCtrl+4', click: () => sendMenu('tab:text') },
         { label: 'Text → JSON', accelerator: 'CmdOrCtrl+5', click: () => sendMenu('tab:json') },
+        { label: 'Mã hoá / Base64', accelerator: 'CmdOrCtrl+6', click: () => sendMenu('tab:crypto') },
         { type: 'separator' },
         { label: 'Phóng to', role: 'zoomIn' },
         { label: 'Thu nhỏ', role: 'zoomOut' },
