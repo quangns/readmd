@@ -581,7 +581,26 @@ function extractLogEntries(text, opts) {
     k = end - 1;
   }
   if (entries.length) entries.trailing = src.slice(cursor);
+  entries.src = src;
   return entries;
+}
+
+/** Gom các payload của một bản ghi log thành { tiền tố: payload } */
+function logRecordObject(src, entries, from, to) {
+  const out = {};
+  let cursor = from;
+  entries.forEach((e, idx) => {
+    let key = cleanLogKey(src.slice(cursor, e.start));
+    cursor = e.end;
+    // Phần chữ sau payload cuối cùng (vd. "took 23ms") ghép vào key để không mất thông tin
+    const tail = idx === entries.length - 1 ? cleanLogKey(src.slice(e.end, to)) : '';
+    if (tail) key = key ? `${key} … ${tail}` : tail;
+    if (!key) key = `_${idx + 1}`;
+    let k = key;
+    for (let n = 2; Object.prototype.hasOwnProperty.call(out, k); n++) k = `${key} (${n})`;
+    out[k] = e.value;
+  });
+  return out;
 }
 
 export function looksLikeLog(text, opts = {}) {
@@ -596,18 +615,21 @@ export function looksLikeLog(text, opts = {}) {
 export function parseLog(text, opts = {}) {
   const entries = extractLogEntries(text, opts);
   if (!entries.length) throw new ConvertError('Không tìm thấy JSON / object trong dòng log');
-  const out = {};
-  entries.forEach((e, idx) => {
-    let key = cleanLogKey(e.prefix);
-    // Phần chữ sau payload cuối cùng (vd. "took 23ms") ghép vào key để không mất thông tin
-    const tail = idx === entries.length - 1 ? cleanLogKey(entries.trailing || '') : '';
-    if (tail) key = key ? `${key} … ${tail}` : tail;
-    if (!key) key = `_${idx + 1}`;
-    let k = key;
-    for (let n = 2; Object.prototype.hasOwnProperty.call(out, k); n++) k = `${key} (${n})`;
-    out[k] = e.value;
-  });
-  return out;
+  const { src } = entries;
+  // Tách bản ghi theo dòng; dấu xuống dòng nằm trong payload (JSON nhiều dòng) không tính
+  const records = [];
+  let from = 0;
+  for (let k = 0; k <= src.length; k++) {
+    if (k < src.length && src[k] !== '\n') continue;
+    if (k < src.length && entries.some((e) => k > e.start && k < e.end)) continue;
+    const own = entries.filter((e) => e.start >= from && e.end <= k);
+    const line = src.slice(from, k).trim();
+    if (line) records.push(own.length ? logRecordObject(src, own, from, k) : line);
+    from = k + 1;
+  }
+  // Một bản ghi: trả object như cũ; nhiều bản ghi: mảng theo thứ tự,
+  // dòng có payload -> { tiền tố: payload }, dòng không parse được giữ nguyên dạng chuỗi
+  return records.length === 1 ? records[0] : records;
 }
 
 // ---------- Nhận diện + chuyển ----------
