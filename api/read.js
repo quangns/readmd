@@ -2,6 +2,7 @@
 //   POST /api/read                 body: Markdown thô (text/markdown, text/plain) hoặc JSON { "markdown": "..." }
 //   POST /api/read?format=raw      trả lại nguyên văn Markdown (text/markdown; charset=utf-8)
 // Mặc định trả JSON: { title, frontmatter, headings, diagrams, stats, markdown }
+import { isCrossSite } from '../lib/security-headers.js';
 import { marked } from 'marked';
 import { outline } from '../public/js/srs-core.js';
 
@@ -14,6 +15,7 @@ function readMarkdown(req) {
 }
 
 export default function handler(req, res) {
+  if (isCrossSite(req)) return res.status(403).json({ error: 'Không chấp nhận request từ website khác.' });
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     return res.status(405).json({ error: 'Chỉ hỗ trợ POST. Gửi Markdown trong body (text/markdown) hoặc JSON { "markdown": "..." }.' });

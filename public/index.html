@@ -5,17 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>convertSRS — Chuyển Markdown sang PDF / TXT</title>
   <meta name="color-scheme" content="light dark">
-  <script>
-    // Đặt theme trước khi trang hiển thị để không bị nháy nền sáng
-    (function () {
-      var m = localStorage.getItem('convertsrs-theme');
-      var dark = m === 'dark' || (m !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
-      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-      // Ứng dụng mở theo đường dẫn (#json, #crypto), mặc định convertSRS — gán trước khi vẽ để không nháy
-      var app = location.hash.slice(1);
-      document.documentElement.dataset.app = app === 'json' || app === 'crypto' ? app : 'srs';
-    })();
-  </script>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <script src="/js/boot.js"></script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/vendor/fonts/fonts.css">
   <link rel="stylesheet" href="/vendor/hljs-github.css">

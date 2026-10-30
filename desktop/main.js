@@ -4,6 +4,7 @@ import { app, BrowserWindow, Menu, dialog, ipcMain, net, protocol, session, shel
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildHtml, headerTemplate, footerTemplate, PDF_MARGIN_MM } from './bundle/lib/pdf-html.js';
 
@@ -45,11 +46,15 @@ async function openFile(filePath) {
 
 // ---------- PDF ----------
 const PDF_PARTITION = 'convertsrs-pdf';
+// Cửa sổ tạo PDF chỉ được đọc đúng file tạm của lần in đó (không đọc file khác trên máy)
+const allowedPdfFiles = new Set();
 async function renderPdf(body) {
   const { html, title = 'Tài liệu', options = {}, meta = {} } = body || {};
   if (typeof html !== 'string' || !html.trim()) throw new Error('Thiếu nội dung tài liệu.');
-  const tmp = path.join(os.tmpdir(), `convertsrs-${process.pid}-${Date.now()}.html`);
-  await fs.promises.writeFile(tmp, buildHtml({ title, html, options, meta }), 'utf8');
+  const tmp = path.join(os.tmpdir(), `convertsrs-${randomUUID()}.html`);
+  await fs.promises.writeFile(tmp, buildHtml({ title, html, options, meta }), { encoding: 'utf8', mode: 0o600 });
+  const tmpUrl = pathToFileURL(tmp).toString();
+  allowedPdfFiles.add(tmpUrl);
   // Cửa sổ ẩn, tắt JavaScript: nội dung tài liệu do người dùng cung cấp
   const pdfWin = new BrowserWindow({
     show: false,
@@ -74,6 +79,7 @@ async function renderPdf(body) {
     });
   } finally {
     pdfWin.destroy();
+    allowedPdfFiles.delete(tmpUrl);
     fs.promises.unlink(tmp).catch(() => {});
   }
 }
@@ -242,10 +248,13 @@ app.on('open-file', (e, filePath) => {
 });
 
 app.whenReady().then(() => {
-  // Cửa sổ tạo PDF chỉ được đọc file tạm và data: URI, chặn mọi request ra mạng
+  // Cửa sổ tạo PDF chỉ được đọc đúng file tạm và data: URI; chặn mạng và mọi file khác trên máy
   session.fromPartition(PDF_PARTITION).webRequest.onBeforeRequest((details, cb) => {
-    cb({ cancel: !/^(file|data|devtools):/i.test(details.url) });
+    const ok = /^data:/i.test(details.url) || allowedPdfFiles.has(details.url.split('#')[0]);
+    cb({ cancel: !ok });
   });
+  // Giao diện không cần quyền nào của trình duyệt (camera, micro, vị trí, thông báo…)
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) => cb(['clipboard-read', 'clipboard-sanitized-write'].includes(permission)));
   protocol.handle('app', handleRequest);
   buildMenu();
   createWindow();

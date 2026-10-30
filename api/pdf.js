@@ -1,7 +1,9 @@
 // Vercel Serverless Function: POST /api/pdf  { html, title, options, meta } -> application/pdf
+import { isCrossSite } from '../lib/security-headers.js';
 import { renderPdf, PdfInputError } from '../lib/pdf.js';
 
 export default async function handler(req, res) {
+  if (isCrossSite(req)) return res.status(403).json({ error: 'Không chấp nhận request từ website khác.' });
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     return res.status(405).json({ error: 'Chỉ hỗ trợ POST.' });

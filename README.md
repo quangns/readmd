@@ -99,6 +99,15 @@ Thêm `?format=raw` để nhận lại nguyên văn Markdown (`text/markdown; ch
 
 Body JSON: `{ html, title, options: { format, landscape, cover, toc, pageNumbers }, meta: { fileName, exportedAt, headings } }`. `html` là phần thân tài liệu đã render (sơ đồ đã là SVG), trang web tự gửi khi bấm **Tải PDF**. Khi in, Chromium tắt JavaScript và chặn mọi request mạng ra ngoài.
 
+## Bảo mật
+
+- Phụ thuộc: `npm audit` ở thư mục gốc và `desktop/` đều 0 lỗ hổng (kiểm tra lại định kỳ). `chromium-bidi` được ép lên bản kèm `zod` đã vá (GHSA-mrhx-c7xc-m3w5) qua `overrides`; dự án dùng giao thức CDP nên gói này không chạy.
+- Nội dung tài liệu: Markdown được lọc bằng DOMPurify, Mermaid chạy `securityLevel: 'strict'`; Content-Security-Policy chặn script lạ (`script-src 'self'`, không có script inline), cùng `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` (cấu hình ở `vercel.json` và `lib/security-headers.js`).
+- Tạo PDF: Chromium tắt JavaScript, chặn mọi request mạng; API `/api/pdf`, `/api/read` từ chối request từ website khác. API công khai không giới hạn tần suất — nên bật rate limit trong Vercel Firewall nếu cần.
+- Bản desktop: `contextIsolation`, `sandbox`, không `nodeIntegration`; liên kết ngoài mở bằng trình duyệt; cửa sổ tạo PDF chỉ đọc đúng file tạm; tắt quyền trình duyệt không cần; Electron fuses: tắt RunAsNode, NODE_OPTIONS, `--inspect`, chỉ nạp mã từ asar.
+- Mã hoá: dùng WebCrypto của trình duyệt, khoá sinh và xử lý trên máy, không gửi đi đâu.
+- Server local (`npm run dev`) mặc định chỉ nghe `127.0.0.1`.
+
 ## Ứng dụng Windows (desktop)
 
 Thư mục `desktop/` đóng gói giao diện này thành ứng dụng Windows bằng **Electron**: tạo PDF ngay trên máy bằng `printToPDF` (không cần server, không cần mạng, không giới hạn 4.5 MB như bản Vercel).

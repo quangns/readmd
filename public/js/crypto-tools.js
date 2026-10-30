@@ -203,9 +203,13 @@ export function keyFormats(algo) {
 
 /** Xuất khoá theo định dạng: { publicText, privateText, publicName, privateName } (khoá đối xứng chỉ có privateText) */
 export async function exportKeys(keys, format) {
+  // kid: cặp khoá lấy từ vân tay khoá công khai; khoá đối xứng dùng giá trị ngẫu nhiên
+  // (không suy ra từ khoá bí mật vì kid thường được gửi công khai trong header JWT)
   const jwkExtra = async (jwk) => {
-    const fp = await keyFingerprint(keys);
-    return { kid: fp.base64.slice(7, 27), alg: keys.jwkAlg, ...jwk };
+    const kid = keys.kind === 'secret'
+      ? bytesToBase64(crypto.getRandomValues(new Uint8Array(15)), { urlSafe: true })
+      : (await keyFingerprint(keys)).base64.slice(7, 27);
+    return { kid, alg: keys.jwkAlg, ...jwk };
   };
   if (keys.kind === 'secret') {
     const raw = new Uint8Array(await crypto.subtle.exportKey('raw', keys.secretKey));
