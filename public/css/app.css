@@ -392,6 +392,19 @@ select {
 .t2j__from { margin-left: auto; }
 .t2j__from select { max-width: 320px; }
 .t2j__grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; }
+/* Vùng nhập / kết quả: kéo thanh giữa để đổi độ rộng (app.js đặt grid-template-columns theo tỉ lệ đã lưu) */
+.t2j__grid--split { grid-template-columns: minmax(0, 1fr) 0.75rem minmax(0, 1fr); gap: 0.25rem; }
+.t2j__split {
+  position: relative; cursor: col-resize; touch-action: none; border-radius: 0.4rem;
+  margin-top: calc(40px + 0.5rem);
+}
+.t2j__split::before {
+  content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; transform: translateX(-50%);
+  border-radius: 2px; background: var(--line); transition: background 120ms var(--ease);
+}
+.t2j__split:hover::before, .t2j__split:focus-visible::before, .t2j__split.is-dragging::before { background: var(--accent); width: 3px; }
+.t2j__split:focus-visible { outline: none; }
+html.is-resizing, html.is-resizing * { cursor: col-resize !important; user-select: none !important; }
 .t2j__col { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; }
 .t2j__head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-height: 40px; margin-bottom: 0.5rem; }
 .t2j__title { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
@@ -469,7 +482,8 @@ select {
 .t2j__output.is-error { color: var(--rose); white-space: pre-wrap; }
 .t2j__output .hljs-attr { color: var(--accent); }
 @media (max-width: 960px) {
-  .t2j__grid { grid-template-columns: minmax(0, 1fr); }
+  .t2j__grid, .t2j__grid--split { grid-template-columns: minmax(0, 1fr) !important; }
+  .t2j__split { display: none; }
   #t2jInput, .t2j__output { min-height: 260px; }
   .t2j__from { margin-left: 0; }
 }

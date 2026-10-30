@@ -1313,6 +1313,52 @@ const t2j = {
 };
 const t2jLines = attachLineNumbers(t2j.input);
 for (const [value, label] of Object.entries(T2J_FORMATS)) t2j.format.add(new Option(label, value));
+// Thanh kéo giữa vùng nhập và kết quả: kéo / phím ← → để đổi độ rộng, nhấp đúp chia đều; nhớ tỉ lệ đã chọn
+(() => {
+  const grid = $('#t2jGrid');
+  const split = $('#t2jSplit');
+  const KEY = 'convertsrs.t2jSplit';
+  const MIN = 0.15, MAX = 0.85;
+  const apply = (r, save = true) => {
+    r = Math.min(MAX, Math.max(MIN, r));
+    grid.style.gridTemplateColumns = `minmax(0, ${r}fr) 0.75rem minmax(0, ${1 - r}fr)`;
+    split.setAttribute('aria-valuenow', String(Math.round(r * 100)));
+    split.dataset.ratio = r;
+    if (save) try { localStorage.setItem(KEY, String(r)); } catch { /* chế độ riêng tư */ }
+  };
+  const saved = Number((() => { try { return localStorage.getItem(KEY); } catch { return null; } })());
+  apply(saved > 0 && saved < 1 ? saved : 0.5, false);
+  // Không preventDefault ở pointerdown (để còn sự kiện dblclick); chặn bôi đen chữ bằng html.is-resizing
+  split.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    split.setPointerCapture(e.pointerId);
+    split.classList.add('is-dragging');
+    document.documentElement.classList.add('is-resizing');
+    const box = grid.getBoundingClientRect();
+    const move = (ev) => apply((ev.clientX - box.left) / box.width);
+    const up = () => {
+      split.classList.remove('is-dragging');
+      document.documentElement.classList.remove('is-resizing');
+      split.removeEventListener('pointermove', move);
+      split.removeEventListener('pointerup', up);
+      split.removeEventListener('pointercancel', up);
+    };
+    split.addEventListener('pointermove', move);
+    split.addEventListener('pointerup', up);
+    split.addEventListener('pointercancel', up);
+  });
+  split.addEventListener('dblclick', () => apply(0.5));
+  split.addEventListener('keydown', (e) => {
+    const step = e.shiftKey ? 0.1 : 0.05;
+    const r = Number(split.dataset.ratio) || 0.5;
+    if (e.key === 'ArrowLeft') apply(r - step);
+    else if (e.key === 'ArrowRight') apply(r + step);
+    else if (e.key === 'Home') apply(MIN);
+    else if (e.key === 'End') apply(MAX);
+    else return;
+    e.preventDefault();
+  });
+})();
 const T2J_SAMPLE = `// Request
 { "email": "partner_email", "password": 'partner_password', clientId: "your_client_id",
   "expAccess": 3600, "expRefresh": 84600, }
