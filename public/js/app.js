@@ -1722,18 +1722,11 @@ async function runCrypto() {
         if (seq !== ct.seq) return;
         if (!results.length) throw new Error('Nhập secret 2FA.');
         if (results.length === 1 && results[0].e) throw results[0].e;
-        const group = (t) => t.replace(/^(\d{3,4}?)(\d{3,4})$/, '$1 $2');
-        const mask = (l) => { const s = l.replace(/\s+/g, ''); return s.length > 10 ? `${s.slice(0, 4)}…${s.slice(-4)}` : s; };
-        const name = (l, r) => (r?.label || mask(l)).slice(0, 32);
-        const width = Math.max(...lines.map((l, i) => name(l, results[i].r).length));
-        ct.output.textContent = results.map(({ r, e }, i) => {
-          if (e) return `${name(lines[i]).padEnd(width)}  lỗi: ${e.message}`;
-          const line = `${group(r.token)}   còn ${String(r.remaining).padStart(2)} s · kế tiếp ${group(r.next)}`;
-          return results.length === 1 ? line : `${name(lines[i], r).padEnd(width)}  ${line}`;
-        }).join('\n');
+        // Kết quả chỉ hiện mã hiện tại (mỗi dòng một mã, đúng thứ tự dòng nhập); dòng lỗi ghi lỗi
+        ct.output.textContent = results.map(({ r, e }) => (r ? r.token : `lỗi: ${e.message}`)).join('\n');
         ct.out = results.map(({ r }) => r?.token ?? '').join('\n');
         const ok = results.find(({ r }) => r)?.r;
-        ct.outInfo.textContent = ok ? `TOTP · ${ok.algorithm} · ${ok.digits} số · ${ok.period} s` : 'lỗi';
+        ct.outInfo.textContent = ok ? `TOTP · ${ok.algorithm} · ${ok.digits} số · còn ${ok.remaining} s` : 'lỗi';
       } else if (ct.mode === 'b64enc') {
         ct.out = bytesToBase64(data || utf8Bytes(text), { urlSafe: ct.urlSafe.checked, wrap: ct.wrap.checked });
         ct.outInfo.textContent = `${ct.urlSafe.checked ? 'Base64URL' : 'Base64'} · ${ct.out.replace(/\n/g, '').length} ký tự`;
