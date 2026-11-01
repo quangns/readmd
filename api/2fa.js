@@ -1,7 +1,7 @@
 // Vercel Serverless Function: mã 2FA (TOTP) hiện tại từ secret Base32.
 //   GET /api/2fa?secret=JBSWY3DPEHPK3PXP            -> { "token": "123456", "remaining": 17, ... }
 //   GET /api/2fa/JBSWY3DPEHPK3PXP                   (dạng đường dẫn, giống 2fa.live/tok/<secret>)
-//   Tuỳ chọn: digits=6..10 (mặc định 6), period=giây (30), algorithm=SHA1|SHA256|SHA512, format=text (chỉ trả mã)
+//   Tuỳ chọn: digits=6..10 (mặc định 6), period=giây (60), algorithm=SHA1|SHA256|SHA512, format=text (chỉ trả mã)
 //   secret cũng có thể là URI otpauth://totp/…?secret=… (mã hoá URL); nhiều secret ngăn bằng "|" -> mảng kết quả
 // Không lưu secret; trả Cache-Control: no-store.
 import { isCrossSite } from '../lib/security-headers.js';

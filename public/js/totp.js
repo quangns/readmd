@@ -30,7 +30,8 @@ export function base32Decode(input) {
  */
 export function parseOtpInput(line, defaults = {}) {
   let s = String(line).trim().replace(/^(['"`])(.*)\1$/s, '$2').trim();
-  const opts = { digits: 6, period: 30, algorithm: 'SHA1', label: '', ...defaults };
+  // Chu kỳ mặc định 60 giây (theo hệ thống đang dùng); chuẩn Google Authenticator là 30 — chọn lại qua tuỳ chọn / period=30
+  const opts = { digits: 6, period: 60, algorithm: 'SHA1', label: '', ...defaults };
   if (/^otpauth:\/\//i.test(s)) {
     let url;
     try { url = new URL(s); } catch { throw new TotpError('URI otpauth:// không hợp lệ'); }
