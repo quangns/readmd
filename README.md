@@ -18,7 +18,7 @@ Thanh menu trên cùng có 3 ứng dụng: **convertSRS** (mặc định — đ�
 | Mục lục | Tự sinh từ tiêu đề + danh mục hình, đánh dấu mục đang đọc |
 | Flowchart → sequence | Sơ đồ `flowchart` / `graph` trong file tự hiển thị dạng **sequence diagram**. Nếu tác giả đã đánh số bước ("1.", "3a.", "10b."), sơ đồ đi **đúng theo thứ tự số** và giữ nguyên số đó; cột xếp theo thứ tự xuất hiện trong luồng; mỗi bước là mũi tên từ bên thực hiện tới bên nhận bước kế tiếp, bước "Trả… / Phản hồi… / Từ chối…" là mũi tên nét đứt quay về bên đã gọi; dòng in nghiêng ngay dưới sơ đồ ("*Sơ đồ 1 — …*") được dùng làm chú thích hình. Luồng nghiệp vụ: cột = người/bộ phận thực hiện (lấy từ `subgraph` hoặc chủ ngữ đầu nhãn như "Người dùng…", "Hệ thống…"; bước không có chủ ngữ thuộc "Hệ thống"), mỗi bước là một mũi tên đánh số theo thứ tự luồng, hình thoi thành bước "Kiểm tra: …" có đánh số; nhánh đi tiếp (Có/Yes với câu khẳng định như "Hợp lệ?", Không/No với câu mang nghĩa lỗi như "Sai quá 3 lần?") nằm ở luồng chính, nhánh còn lại vẽ thành đường riêng trong khối `opt` (kết thúc bằng "Kết thúc luồng" nếu dừng ở đó); nhánh No nhảy thẳng tới một bước phía sau thành khối nhỏ `opt [No]` "Chuyển tới: …"; một bước dẫn tới nhiều việc (không phải hình thoi) được viết lần lượt ở luồng chính, không dựng khung lồng; vòng lặp ghi "Quay lại bước n". Sơ đồ kiến trúc (node là thành phần): mỗi node một cột, `subgraph` thành nhóm. Bật/tắt chung ở sidebar ("Hiển thị sơ đồ"), hoặc từng hình bằng nút **Dạng gốc / Dạng sequence**. Thêm dòng `%% giữ nguyên` vào sơ đồ để luôn giữ flowchart. Áp dụng cho cả PDF và ảnh SVG/PNG; bản TXT vẫn giữ mã nguồn gốc |
 | Text → JSON | Tab chuyển đoạn text sang JSON chuẩn, tự nhận diện: JSON/JS "lỏng" (comment, nháy đơn, key không nháy, dấu phẩy thừa; nhiều khối `// Request` / `// Response` gom thành object), **Java `toString()` / log** (`{key=value, …}`, Lombok `Order(id=1, …)`, IntelliJ `Order{name='x'}`; giá trị có khoảng trắng / dấu phẩy, giá trị rỗng, `null`), **dòng log** có JSON / Java toString phía sau (`2026-09-30 … INFO Response: {"error_code":"123"}` → phần chữ phía trước làm key; nhiều dòng log → hiển thị theo đúng từng dòng như log gốc: dòng không có JSON giữ nguyên văn bản, dòng có JSON → `"tiền tố":` rồi JSON xuống dòng, lùi 1 cấp (tải về dạng `.txt`); JSON in nhiều dòng vẫn tính là một dòng log), `key: value` / `key = value` (thụt lề lồng nhau, `a.b.c`), bảng Markdown / CSV / TSV (dán từ Excel) → mảng object, **bảng mô tả field** (`Field \| Type \| M/O`) → JSON mẫu theo kiểu, query string. Lấy nhanh khối mã / bảng trong tài liệu đang mở; thụt lề 2/4/tab/thu gọn; báo lỗi kèm dòng/cột; sao chép, tải `.json`. Kéo thanh giữa để nới rộng vùng nhập hoặc kết quả (phím ← → cũng được, nhấp đúp để chia đều, nhớ cho lần sau). Kết quả hiển thị dạng **cây thu gọn được**: nút ▾/▸ trên từng object/mảng, "Tập trung" vào một phần tử (thu gọn phần còn lại, hiện đường dẫn `$ › …`), sao chép riêng từng phần tử, Mở hết / Thu gọn hết / Mở tới cấp n |
-| Mã hoá / Base64 | Tab băm **SHA-256** (và SHA-1/384/512), tuỳ chọn khoá **HMAC**, kết quả hex / HEX / Base64 — băm một chiều, không giải mã ngược; **mã hoá Base64** (UTF-8, tuỳ chọn Base64URL, ngắt dòng 76) và **giải mã Base64** (tự nhận Base64URL, thiếu `=`, xuống dòng, tiền tố `data:…;base64,`; dữ liệu nhị phân hiện hex và tải về được). Xử lý cả file (chọn hoặc thả file vào tab); "Dùng làm đầu vào" để xử lý nối tiếp. **Sinh cặp khoá**: RSA 2048/3072/4096 (mã hoá RSA-OAEP, ký RS256/PS256), ECDSA và ECDH P-256/384/521, Ed25519, X25519, khoá đối xứng AES-GCM 128/192/256 và HMAC 256/384/512; xuất PEM (PKCS#8 / SPKI), PEM PKCS#1 (RSA), JWK, Base64 DER, Base64/Hex cho khoá đối xứng; kèm vân tay SHA-256 và tự kiểm tra cặp khoá (mã hoá–giải mã / ký–xác minh / trao đổi khoá). Dùng WebCrypto của trình duyệt, dữ liệu không rời khỏi máy |
+| Mã hoá / Base64 | Tab băm **SHA-256** (và SHA-1/384/512), tuỳ chọn khoá **HMAC**, kết quả hex / HEX / Base64 — băm một chiều, không giải mã ngược; **mã hoá Base64** (UTF-8, tuỳ chọn Base64URL, ngắt dòng 76) và **giải mã Base64** (tự nhận Base64URL, thiếu `=`, xuống dòng, tiền tố `data:…;base64,`; dữ liệu nhị phân hiện hex và tải về được). Xử lý cả file (chọn hoặc thả file vào tab); "Dùng làm đầu vào" để xử lý nối tiếp. **Sinh cặp khoá**: RSA 2048/3072/4096 (mã hoá RSA-OAEP, ký RS256/PS256), ECDSA và ECDH P-256/384/521, Ed25519, X25519, khoá đối xứng AES-GCM 128/192/256 và HMAC 256/384/512; xuất PEM (PKCS#8 / SPKI), PEM PKCS#1 (RSA), JWK, Base64 DER, Base64/Hex cho khoá đối xứng; kèm vân tay SHA-256 và tự kiểm tra cặp khoá (mã hoá–giải mã / ký–xác minh / trao đổi khoá); nút "Tải cả 2 file". **Mã 2FA (TOTP)**: dán secret Base32 hoặc URI `otpauth://totp/…` (mỗi dòng một tài khoản) → mã 6/8 số tự đổi theo chu kỳ 30/60 s, kèm số giây còn lại và mã kế tiếp; SHA-1/256/512; có API `GET /api/2fa`. Dùng WebCrypto của trình duyệt, dữ liệu không rời khỏi máy |
 | Khung lồng nhau | Khung `alt` / `opt` / `loop` / `par` trong sequence diagram được tô màu theo tầng lồng (xanh dương → hổ phách → xanh ngọc → hồng): viền, nhãn góc và tiêu đề điều kiện (kể cả `else`) cùng màu với khung của nó; áp dụng cả PDF và ảnh |
 | Giao diện | Chọn **Sáng / Tối / Hệ thống** trên thanh trên cùng (ghi nhớ trong trình duyệt, chế độ Hệ thống tự đổi theo OS). Sơ đồ được vẽ lại theo theme; file xuất (PDF, in, SVG/PNG) luôn dùng bản nền sáng |
 
@@ -32,11 +32,14 @@ Chọn **JavaScript / Node.js** vì phù hợp nhất với Vercel:
 - **Vercel Serverless Functions** (`api/`, Node.js):
   - `POST /api/pdf` — `puppeteer-core` + `@sparticuz/chromium` in HTML đã render ra PDF.
   - `POST /api/read` — đọc Markdown, **không chuyển đổi**, trả về nguyên văn + cấu trúc.
+  - `GET /api/2fa` — mã 2FA (TOTP) hiện tại từ secret.
 - Font **Be Vietnam Pro** (thiết kế cho tiếng Việt) và **JetBrains Mono**, đóng gói sẵn, không phụ thuộc CDN.
 
 ```
 api/pdf.js            Vercel Function tạo PDF
 api/read.js           Vercel Function đọc Markdown
+api/2fa.js            Vercel Function mã 2FA (TOTP)
+public/js/totp.js     TOTP (RFC 6238) dùng chung trình duyệt + API
 lib/pdf.js            Logic in PDF dùng chung (Vercel + local)
 public/               Site tĩnh (index.html, css/, js/, samples/)
 public/js/srs-core.js Lõi xử lý dùng chung trình duyệt + API (sơ đồ, mục lục, TXT)
@@ -95,6 +98,22 @@ curl -X POST https://<domain>/api/read -H 'Content-Type: text/markdown' --data-b
 
 Thêm `?format=raw` để nhận lại nguyên văn Markdown (`text/markdown; charset=utf-8`).
 
+### `GET /api/2fa` — mã 2FA (TOTP)
+
+Lấy mã hiện tại từ secret Base32 (như Google Authenticator; tương tự 2fa.live):
+
+```bash
+curl https://<domain>/api/2fa?secret=JBSWY3DPEHPK3PXP
+curl https://<domain>/api/2fa/JBSWY3DPEHPK3PXP            # dạng đường dẫn
+curl 'https://<domain>/api/2fa?secret=AAAA...|BBBB...&format=text'   # nhiều secret, chỉ trả mã
+```
+
+```json
+{ "token": "747278", "next": "943513", "remaining": 12, "period": 30, "digits": 6, "algorithm": "SHA1" }
+```
+
+Tuỳ chọn: `digits` (6–10, mặc định 6), `period` (giây, mặc định 30), `algorithm` (`SHA1` / `SHA256` / `SHA512`), `format=text`. `secret` cũng nhận URI `otpauth://totp/…` (mã hoá URL); nhiều secret ngăn bằng `|` (tối đa 50) → trả mảng. Không lưu secret, trả `Cache-Control: no-store`. Lưu ý: secret nằm trong URL nên có thể xuất hiện trong log truy cập — với tài khoản quan trọng, nên dùng ô "Mã 2FA (TOTP)" trên trang (tính ngay trên trình duyệt).
+
 ### `POST /api/pdf`
 
 Body JSON: `{ html, title, options: { format, landscape, cover, toc, pageNumbers }, meta: { fileName, exportedAt, headings } }`. `html` là phần thân tài liệu đã render (sơ đồ đã là SVG), trang web tự gửi khi bấm **Tải PDF**. Khi in, Chromium tắt JavaScript và chặn mọi request mạng ra ngoài.
@@ -103,7 +122,7 @@ Body JSON: `{ html, title, options: { format, landscape, cover, toc, pageNumbers
 
 - Phụ thuộc: `npm audit` ở thư mục gốc và `desktop/` đều 0 lỗ hổng (kiểm tra lại định kỳ). `chromium-bidi` được ép lên bản kèm `zod` đã vá (GHSA-mrhx-c7xc-m3w5) qua `overrides`; dự án dùng giao thức CDP nên gói này không chạy.
 - Nội dung tài liệu: Markdown được lọc bằng DOMPurify, Mermaid chạy `securityLevel: 'strict'`; Content-Security-Policy chặn script lạ (`script-src 'self'`, không có script inline), cùng `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` (cấu hình ở `vercel.json` và `lib/security-headers.js`).
-- Tạo PDF: Chromium tắt JavaScript, chặn mọi request mạng; API `/api/pdf`, `/api/read` từ chối request từ website khác. API công khai không giới hạn tần suất — nên bật rate limit trong Vercel Firewall nếu cần.
+- Tạo PDF: Chromium tắt JavaScript, chặn mọi request mạng; API `/api/pdf`, `/api/read`, `/api/2fa` từ chối request từ website khác. API công khai không giới hạn tần suất — nên bật rate limit trong Vercel Firewall nếu cần.
 - Bản desktop: `contextIsolation`, `sandbox`, không `nodeIntegration`; liên kết ngoài mở bằng trình duyệt; cửa sổ tạo PDF chỉ đọc đúng file tạm; tắt quyền trình duyệt không cần; Electron fuses: tắt RunAsNode, NODE_OPTIONS, `--inspect`, chỉ nạp mã từ asar.
 - Mã hoá: dùng WebCrypto của trình duyệt, khoá sinh và xử lý trên máy, không gửi đi đâu.
 - Server local (`npm run dev`) mặc định chỉ nghe `127.0.0.1`.

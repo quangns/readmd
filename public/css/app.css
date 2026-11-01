@@ -489,7 +489,7 @@ html.is-resizing, html.is-resizing * { cursor: col-resize !important; user-selec
 }
 
 /* Tab Mã hoá / Base64 */
-.segmented.segmented--mode { grid-template-columns: repeat(4, auto); margin: 0; }
+.segmented.segmented--mode { grid-template-columns: repeat(5, auto); margin: 0; }
 .kg { display: grid; gap: 0.75rem; }
 .kg[hidden], .t2j__grid[hidden] { display: none; }
 .kg-info {

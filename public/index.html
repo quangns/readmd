@@ -262,6 +262,7 @@
               <button class="segmented__item" role="radio" aria-checked="false" data-ct-mode="b64enc">Mã hoá Base64</button>
               <button class="segmented__item" role="radio" aria-checked="false" data-ct-mode="b64dec">Giải mã Base64</button>
               <button class="segmented__item" role="radio" aria-checked="false" data-ct-mode="keygen">Sinh cặp khoá</button>
+              <button class="segmented__item" role="radio" aria-checked="false" data-ct-mode="totp">Mã 2FA (TOTP)</button>
             </div>
           </div>
           <div class="ct-optrow">
@@ -284,6 +285,20 @@
               <label class="check check--sm"><input type="checkbox" id="ctWrap"> Ngắt dòng mỗi 76 ký tự</label>
             </span>
             <span class="ct-opts ct-opts--empty" data-ct-for="b64dec" hidden></span>
+            <span class="ct-opts" data-ct-for="totp" hidden>
+              <label class="field field--inline">
+                <span class="field__label">Số chữ số</span>
+                <select id="totpDigits"><option value="6">6</option><option value="8">8</option></select>
+              </label>
+              <label class="field field--inline">
+                <span class="field__label">Chu kỳ</span>
+                <select id="totpPeriod"><option value="30">30 giây</option><option value="60">60 giây</option></select>
+              </label>
+              <label class="field field--inline">
+                <span class="field__label">Thuật toán</span>
+                <select id="totpAlgo"><option value="SHA1">SHA-1</option><option value="SHA256">SHA-256</option><option value="SHA512">SHA-512</option></select>
+              </label>
+            </span>
             <span class="ct-opts" data-ct-for="keygen" hidden>
               <label class="field field--inline"><span class="field__label">Phương thức</span><select id="kgAlgo"></select></label>
               <label class="field field--inline"><span class="field__label">Độ dài / đường cong</span><select id="kgSize"></select></label>
@@ -296,6 +311,7 @@
           <p class="ct-hint" data-ct-for="hash">SHA là hàm băm một chiều: dùng để tạo / đối chiếu chữ ký, <strong>không giải mã ngược được</strong>. Văn bản được băm theo UTF-8.</p>
           <p class="ct-hint" data-ct-for="b64enc" hidden>Mã hoá văn bản (UTF-8) hoặc file sang Base64. Base64 chỉ là cách biểu diễn dữ liệu, <strong>không phải mã hoá bảo mật</strong>.</p>
           <p class="ct-hint" data-ct-for="b64dec" hidden>Tự nhận Base64URL, thiếu "=", nháy / dấu ":" bao quanh, Bearer, data:…;base64,. JWT được giải từng phần kèm giờ iat / exp. Nhị phân hiện hex, tải về được.</p>
+          <p class="ct-hint" data-ct-for="totp" hidden>Dán secret Base32 hoặc URI otpauth://, mỗi dòng một tài khoản; mã tự đổi theo chu kỳ, tính ngay trên máy. API: <code>GET /api/2fa?secret=&lt;secret&gt;</code> hoặc <code>/api/2fa/&lt;secret&gt;</code>.</p>
           <p class="ct-hint" data-ct-for="keygen" hidden>Khoá được sinh ngay trên máy bằng WebCrypto, không gửi đi đâu. <strong>Giữ bí mật khoá bí mật</strong> — chỉ chia sẻ khoá công khai.</p>
           <div class="kg" data-ct-for="keygen" hidden>
             <div class="kg-info" id="kgInfo" hidden></div>
@@ -322,7 +338,7 @@
               </div>
             </div>
           </div>
-          <div class="t2j__grid" data-ct-for="hash b64enc b64dec">
+          <div class="t2j__grid" data-ct-for="hash b64enc b64dec totp">
             <div class="t2j__col">
               <div class="t2j__head">
                 <span class="t2j__title">Đầu vào <span class="t2j__status" id="ctInInfo"></span></span>

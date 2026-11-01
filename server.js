@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import pdfHandler from './api/pdf.js';
 import readHandler from './api/read.js';
+import totpHandler from './api/2fa.js';
 import { SECURITY_HEADERS } from './lib/security-headers.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -22,6 +23,7 @@ app.use(express.json({ limit: '4.5mb' }));
 app.use(express.text({ type: ['text/*'], limit: '4.5mb' }));
 app.all('/api/pdf', pdfHandler);
 app.all('/api/read', readHandler);
+app.all(['/api/2fa', '/api/2fa/:secret'], totpHandler);
 app.use(express.static(path.join(ROOT, 'public')));
 
 app.listen(PORT, HOST, () => console.log(`convertSRS: http://${HOST}:${PORT}`));

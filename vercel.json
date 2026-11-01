@@ -9,6 +9,12 @@
       "includeFiles": "node_modules/@sparticuz/chromium/bin/**"
     }
   },
+  "rewrites": [
+    {
+      "source": "/api/2fa/:secret",
+      "destination": "/api/2fa?secret=:secret"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",

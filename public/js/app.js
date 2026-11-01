@@ -6,6 +6,7 @@ import {
   hashBytes, formatDigest, bytesToBase64, base64ToBytes, decodeJwt, utf8Bytes, utf8Text, hexDump,
   KEY_ALGOS, keyAlgoSupported, generateKeys, exportKeys, keyFormats, keyFingerprint, selfTestKeys,
 } from './crypto-tools.js';
+import { totp } from './totp.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -1686,6 +1687,7 @@ const ct = {
   input: $('#ctInput'), output: $('#ctOutput'), inInfo: $('#ctInInfo'), outInfo: $('#ctOutInfo'),
   algo: $('#ctAlgo'), fmt: $('#ctDigestFmt'), key: $('#ctKey'), urlSafe: $('#ctUrlSafe'), wrap: $('#ctWrap'),
   copy: $('#ctCopy'), use: $('#ctUse'), save: $('#ctSave'),
+  totpDigits: $('#totpDigits'), totpPeriod: $('#totpPeriod'), totpAlgo: $('#totpAlgo'),
 };
 const fmtBytes = (n) => (n < 1024 ? `${n} byte` : formatBytes(n));
 
@@ -1711,6 +1713,27 @@ async function runCrypto() {
         ct.out = formatDigest(digest, ct.fmt.value);
         ct.outInfo.textContent = `${ct.key.value ? 'HMAC-' : ''}${ct.algo.value} · ${digest.length * 8} bit`;
         ct.output.textContent = ct.out;
+      } else if (ct.mode === 'totp') {
+        // Mỗi dòng một secret Base32 / otpauth://; dòng lỗi báo riêng, không làm hỏng các dòng khác
+        const lines = (data ? utf8Text(data) ?? '' : text).split('\n').map((l) => l.trim()).filter(Boolean);
+        const now = Date.now();
+        const defaults = { digits: ct.totpDigits.value, period: ct.totpPeriod.value, algorithm: ct.totpAlgo.value };
+        const results = await Promise.all(lines.map((l) => totp(l, { now, ...defaults }).then((r) => ({ r }), (e) => ({ e }))));
+        if (seq !== ct.seq) return;
+        if (!results.length) throw new Error('Nhập secret 2FA.');
+        if (results.length === 1 && results[0].e) throw results[0].e;
+        const group = (t) => t.replace(/^(\d{3,4}?)(\d{3,4})$/, '$1 $2');
+        const mask = (l) => { const s = l.replace(/\s+/g, ''); return s.length > 10 ? `${s.slice(0, 4)}…${s.slice(-4)}` : s; };
+        const name = (l, r) => (r?.label || mask(l)).slice(0, 32);
+        const width = Math.max(...lines.map((l, i) => name(l, results[i].r).length));
+        ct.output.textContent = results.map(({ r, e }, i) => {
+          if (e) return `${name(lines[i]).padEnd(width)}  lỗi: ${e.message}`;
+          const line = `${group(r.token)}   còn ${String(r.remaining).padStart(2)} s · kế tiếp ${group(r.next)}`;
+          return results.length === 1 ? line : `${name(lines[i], r).padEnd(width)}  ${line}`;
+        }).join('\n');
+        ct.out = results.map(({ r }) => r?.token ?? '').join('\n');
+        const ok = results.find(({ r }) => r)?.r;
+        ct.outInfo.textContent = ok ? `TOTP · ${ok.algorithm} · ${ok.digits} số · ${ok.period} s` : 'lỗi';
       } else if (ct.mode === 'b64enc') {
         ct.out = bytesToBase64(data || utf8Bytes(text), { urlSafe: ct.urlSafe.checked, wrap: ct.wrap.checked });
         ct.outInfo.textContent = `${ct.urlSafe.checked ? 'Base64URL' : 'Base64'} · ${ct.out.replace(/\n/g, '').length} ký tự`;
@@ -1764,8 +1787,12 @@ async function runCrypto() {
     }
   }
   ct.copy.disabled = !ct.out;
-  ct.use.disabled = !ct.out || ct.output.classList.contains('is-binary');
+  ct.use.disabled = !ct.out || ct.output.classList.contains('is-binary') || ct.mode === 'totp';
 }
+// Mã 2FA đổi theo thời gian: cập nhật mỗi giây khi đang mở chế độ TOTP
+setInterval(() => {
+  if (ct.mode === 'totp' && document.documentElement.dataset.app === 'crypto' && !document.hidden && (ct.input.value.trim() || ct.file)) runCrypto();
+}, 1000);
 const toHexString = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 // Nhận dạng vài loại file phổ biến theo chữ ký đầu file (để đặt đuôi khi tải về)
 function sniffType(b) {
@@ -1787,7 +1814,9 @@ function setCryptoMode(mode) {
     b.setAttribute('aria-checked', String(on));
   });
   $$('[data-ct-for]').forEach((e) => { e.hidden = !e.dataset.ctFor.split(' ').includes(mode); });
-  ct.input.placeholder = mode === 'b64dec' ? 'Dán chuỗi Base64 cần giải mã…' : 'Nhập hoặc dán văn bản cần xử lý…';
+  ct.input.placeholder = mode === 'b64dec' ? 'Dán chuỗi Base64 cần giải mã…'
+    : mode === 'totp' ? 'Dán secret 2FA (Base32, vd. JBSWY3DPEHPK3PXP) hoặc otpauth://totp/…\nMỗi dòng một tài khoản.'
+    : 'Nhập hoặc dán văn bản cần xử lý…';
   runCrypto();
 }
 $$('[data-ct-mode]').forEach((b) => b.addEventListener('click', () => setCryptoMode(b.dataset.ctMode)));
@@ -1795,7 +1824,7 @@ let ctTimer;
 const ctLater = () => { clearTimeout(ctTimer); ctTimer = setTimeout(runCrypto, 150); };
 ct.input.addEventListener('input', ctLater);
 ct.key.addEventListener('input', ctLater);
-for (const c of [ct.algo, ct.fmt, ct.urlSafe, ct.wrap]) c.addEventListener('change', runCrypto);
+for (const c of [ct.algo, ct.fmt, ct.urlSafe, ct.wrap, ct.totpDigits, ct.totpPeriod, ct.totpAlgo]) c.addEventListener('change', runCrypto);
 
 function clearCryptoFile() {
   ct.file = null;
