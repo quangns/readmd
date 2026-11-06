@@ -434,7 +434,10 @@ html.is-resizing, html.is-resizing * { cursor: col-resize !important; user-selec
 .t2j__output .code-line::before { counter-increment: ln; content: counter(ln); }
 .t2j__output:has(.code-ln), .t2j__output:has(.jt) { padding-left: 0.35rem; }
 #t2jInput { resize: vertical; }
-.t2j__out { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
+/* Khung kết quả cao cố định theo màn hình: nội dung dài cuộn bên trong (cả dọc lẫn ngang),
+   thanh cuộn ngang luôn nằm trong khung nhìn, không phải kéo trang xuống cuối */
+.t2j__out { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; height: calc(100dvh - 300px); }
+.t2j__out .t2j__output { min-height: 0; height: 100%; }
 .t2j__out:has(.jt-bar:not([hidden])) .t2j__output { border-top-left-radius: 0; border-top-right-radius: 0; }
 
 /* Cây JSON thu gọn được */
@@ -485,6 +488,7 @@ html.is-resizing, html.is-resizing * { cursor: col-resize !important; user-selec
   .t2j__grid, .t2j__grid--split { grid-template-columns: minmax(0, 1fr) !important; }
   .t2j__split { display: none; }
   #t2jInput, .t2j__output { min-height: 260px; }
+  .t2j__out { height: min(70dvh, 560px); }
   .t2j__from { margin-left: 0; }
 }
 
