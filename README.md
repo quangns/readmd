@@ -10,10 +10,19 @@
 
 **Từ khoá:** Markdown to PDF · Markdown viewer · SRS document · Mermaid to PDF / SVG / PNG · flowchart to sequence diagram · JSON formatter · log to JSON · Java toString to JSON · CSV to JSON · SHA-256 online · HMAC · Base64 encoder / decoder · JWT decoder · RSA / ECDSA / Ed25519 key generator · PEM / JWK · TOTP 2FA · password generator · Vercel · Electron.
 
+**🌐 Dùng thử ngay:** [readmd-flax.vercel.app](https://readmd-flax.vercel.app) · Mở thẳng [Text → JSON](https://readmd-flax.vercel.app/#json) · [Mã hoá / Base64](https://readmd-flax.vercel.app/#crypto)
+
+## Video hướng dẫn
+
+[![Video hướng dẫn sử dụng convertSRS](docs/huong-dan-convertSRS.jpg)](docs/huong-dan-convertSRS.mp4)
+
+▶️ **[Xem video hướng dẫn (MP4, 3 phút 53 giây)](docs/huong-dan-convertSRS.mp4)**: đọc tài liệu SRS, sơ đồ Mermaid, xuất PDF; Text → JSON; SHA-256, Base64, JWT, sinh cặp khoá, mã 2FA và sinh password.
+
 ---
 
 ## Mục lục
 
+- [Video hướng dẫn](#video-hướng-dẫn)
 - [Vì sao dùng convertSRS](#vì-sao-dùng-convertsrs)
 - [Tính năng](#tính-năng)
   - [Đọc tài liệu Markdown / SRS](#1-đọc-tài-liệu-markdown--srs)
