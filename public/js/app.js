@@ -5,6 +5,7 @@ import { FORMATS as T2J_FORMATS, convertToJson } from './text2json.js';
 import {
   hashBytes, formatDigest, bytesToBase64, base64ToBytes, decodeJwt, utf8Bytes, utf8Text, hexDump,
   KEY_ALGOS, keyAlgoSupported, generateKeys, exportKeys, keyFormats, keyFingerprint, selfTestKeys,
+  PASSWORD_SETS, generatePassword, passwordStrength,
 } from './crypto-tools.js';
 import { totp } from './totp.js';
 
@@ -1692,7 +1693,7 @@ const ct = {
 const fmtBytes = (n) => (n < 1024 ? `${n} byte` : formatBytes(n));
 
 async function runCrypto() {
-  if (ct.mode === 'keygen') return;
+  if (ct.mode === 'keygen' || ct.mode === 'pwgen') return;
   const seq = ++ct.seq;
   ct.out = '';
   ct.outBytes = null;
@@ -1810,6 +1811,7 @@ function setCryptoMode(mode) {
   ct.input.placeholder = mode === 'b64dec' ? 'Dán chuỗi Base64 cần giải mã…'
     : mode === 'totp' ? 'Dán secret 2FA (Base32, vd. JBSWY3DPEHPK3PXP) hoặc otpauth://totp/…\nMỗi dòng một tài khoản.'
     : 'Nhập hoặc dán văn bản cần xử lý…';
+  if (mode === 'pwgen' && !pw.value) makePassword();
   runCrypto();
 }
 $$('[data-ct-mode]').forEach((b) => b.addEventListener('click', () => setCryptoMode(b.dataset.ctMode)));
@@ -1870,6 +1872,57 @@ ct.save.addEventListener('click', () => {
   if (!ct.outBytes) return;
   const ext = sniffType(ct.outBytes) || (utf8Text(ct.outBytes) != null ? 'txt' : 'bin');
   downloadBlob(new Blob([ct.outBytes]), `giai-ma-base64.${ext}`);
+});
+
+// ---------- Sinh password ----------
+const pw = {
+  len: $('#pwLength'), upper: $('#pwUpper'), lower: $('#pwLower'), digits: $('#pwDigits'), symbols: $('#pwSymbols'),
+  symbolSet: $('#pwSymbolSet'), noAmbiguous: $('#pwNoAmbiguous'),
+  out: $('#pwOut'), copy: $('#pwCopy'), meter: $('#pwMeter'), info: $('#pwInfo'), value: '',
+};
+pw.symbolSet.value = PASSWORD_SETS.symbols;
+function makePassword() {
+  const length = Math.min(128, Math.max(4, Math.round(Number(pw.len.value)) || 16));
+  pw.symbolSet.disabled = !pw.symbols.checked;
+  try {
+    const r = generatePassword({
+      length, upper: pw.upper.checked, lower: pw.lower.checked, digits: pw.digits.checked, symbols: pw.symbols.checked,
+      symbolSet: pw.symbolSet.value.replace(/[\sA-Za-z0-9]/g, '') || PASSWORD_SETS.symbols, noAmbiguous: pw.noAmbiguous.checked,
+    });
+    pw.value = r.password;
+    // Tô màu số / ký tự đặc biệt cho dễ đọc khi gõ tay
+    pw.out.replaceChildren(...Array.from(r.password, (ch) => {
+      const sp = document.createElement('span');
+      sp.textContent = ch;
+      if (/\d/.test(ch)) sp.className = 'pw-d';
+      else if (!/[A-Za-z]/.test(ch)) sp.className = 'pw-s';
+      return sp;
+    }));
+    const st = passwordStrength(r.entropy);
+    pw.meter.dataset.level = st.level;
+    pw.info.textContent = `${st.label} · ${length} ký tự · ${r.poolSize} ký tự có thể dùng · ~${Math.round(r.entropy)} bit entropy`;
+    pw.out.classList.remove('is-error');
+  } catch (err) {
+    pw.value = '';
+    pw.out.textContent = err.message;
+    pw.out.classList.add('is-error');
+    pw.meter.dataset.level = 0;
+    pw.info.textContent = '';
+  }
+  pw.copy.disabled = !pw.value;
+}
+for (const c of [pw.upper, pw.lower, pw.digits, pw.symbols, pw.noAmbiguous]) c.addEventListener('change', makePassword);
+pw.len.addEventListener('input', () => { if (Number(pw.len.value) >= 4 && Number(pw.len.value) <= 128) makePassword(); });
+pw.len.addEventListener('change', () => { pw.len.value = Math.min(128, Math.max(4, Math.round(Number(pw.len.value)) || 16)); makePassword(); });
+pw.symbolSet.addEventListener('input', makePassword);
+$('#pwRegen').addEventListener('click', makePassword);
+pw.copy.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(pw.value);
+    toast('Đã sao chép password.');
+  } catch {
+    toast('Trình duyệt không cho phép sao chép.', true);
+  }
 });
 
 // ---------- Sinh cặp khoá ----------

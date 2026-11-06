@@ -323,3 +323,49 @@ export async function selfTestKeys(keys) {
   if (!(await crypto.subtle.verify(algo, keys.publicKey, sig, msg))) throw new CryptoToolError('Xác minh chữ ký thất bại');
   return 'ký bằng khoá bí mật → xác minh bằng khoá công khai';
 }
+
+// ---------- Sinh password ----------
+export const PASSWORD_SETS = {
+  upper: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+  lower: 'abcdefghijklmnopqrstuvwxyz',
+  digits: '0123456789',
+  symbols: '!@#$%^&*()-_=+[]{};:,.?/~',
+};
+const AMBIGUOUS = /[O0oIl1|`'"]/g;
+
+// Số ngẫu nhiên đều trong [0, n): loại các giá trị rơi vào phần dư để không lệch xác suất
+function randomIndex(n) {
+  const limit = Math.floor(0x100000000 / n) * n;
+  const buf = new Uint32Array(1);
+  do crypto.getRandomValues(buf); while (buf[0] >= limit);
+  return buf[0] % n;
+}
+
+// Mỗi nhóm ký tự được chọn có ít nhất một ký tự; còn lại lấy ngẫu nhiên từ tất cả nhóm rồi xáo trộn
+export function generatePassword({ length = 16, upper = true, lower = true, digits = true, symbols = true, symbolSet, noAmbiguous = false } = {}) {
+  const groups = Object.entries({ upper, lower, digits, symbols })
+    .filter(([, on]) => on)
+    .map(([k]) => {
+      let chars = k === 'symbols' && symbolSet != null ? symbolSet : PASSWORD_SETS[k];
+      if (noAmbiguous) chars = chars.replace(AMBIGUOUS, '');
+      return [...new Set(chars)].join('');
+    })
+    .filter(Boolean);
+  if (!groups.length) throw new CryptoToolError('Chọn ít nhất một nhóm ký tự.');
+  if (length < groups.length) throw new CryptoToolError(`Độ dài phải ≥ ${groups.length} để có đủ mỗi nhóm một ký tự.`);
+  const all = [...new Set(groups.join(''))].join('');
+  const out = groups.map((g) => g[randomIndex(g.length)]);
+  while (out.length < length) out.push(all[randomIndex(all.length)]);
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = randomIndex(i + 1);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return { password: out.join(''), poolSize: all.length, entropy: length * Math.log2(all.length) };
+}
+
+export function passwordStrength(entropy) {
+  if (entropy < 40) return { label: 'Yếu', level: 1 };
+  if (entropy < 60) return { label: 'Trung bình', level: 2 };
+  if (entropy < 80) return { label: 'Mạnh', level: 3 };
+  return { label: 'Rất mạnh', level: 4 };
+}

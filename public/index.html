@@ -263,6 +263,7 @@
               <button class="segmented__item" role="radio" aria-checked="false" data-ct-mode="b64dec">Giải mã Base64</button>
               <button class="segmented__item" role="radio" aria-checked="false" data-ct-mode="keygen">Sinh cặp khoá</button>
               <button class="segmented__item" role="radio" aria-checked="false" data-ct-mode="totp">Mã 2FA (TOTP)</button>
+              <button class="segmented__item" role="radio" aria-checked="false" data-ct-mode="pwgen">Sinh password</button>
             </div>
           </div>
           <div class="ct-optrow">
@@ -299,6 +300,21 @@
                 <select id="totpAlgo"><option value="SHA1">SHA-1</option><option value="SHA256">SHA-256</option><option value="SHA512">SHA-512</option></select>
               </label>
             </span>
+            <span class="ct-opts" data-ct-for="pwgen" hidden>
+              <label class="field field--inline pw-len">
+                <span class="field__label">Số ký tự</span>
+                <input type="number" id="pwLength" min="4" max="128" value="16">
+              </label>
+              <label class="check check--sm"><input type="checkbox" id="pwUpper" checked> Chữ hoa A–Z</label>
+              <label class="check check--sm"><input type="checkbox" id="pwLower" checked> Chữ thường a–z</label>
+              <label class="check check--sm"><input type="checkbox" id="pwDigits" checked> Số 0–9</label>
+              <label class="check check--sm"><input type="checkbox" id="pwSymbols" checked> Ký tự đặc biệt</label>
+              <label class="field field--inline ct-key pw-symset">
+                <span class="field__label">Ký tự đặc biệt dùng</span>
+                <input type="text" id="pwSymbolSet" spellcheck="false" autocomplete="off">
+              </label>
+              <label class="check check--sm" title="Bỏ O 0 o I l 1 | ` ' &quot;"><input type="checkbox" id="pwNoAmbiguous"> Bỏ ký tự dễ nhầm (O0, l1…)</label>
+            </span>
             <span class="ct-opts" data-ct-for="keygen" hidden>
               <label class="field field--inline"><span class="field__label">Phương thức</span><select id="kgAlgo"></select></label>
               <label class="field field--inline"><span class="field__label">Độ dài / đường cong</span><select id="kgSize"></select></label>
@@ -313,6 +329,18 @@
           <p class="ct-hint" data-ct-for="b64dec" hidden>Tự nhận Base64URL, thiếu "=", nháy / dấu ":" bao quanh, Bearer, data:…;base64,. JWT được giải từng phần kèm giờ iat / exp. Nhị phân hiện hex, tải về được.</p>
           <p class="ct-hint" data-ct-for="totp" hidden>Dán secret Base32 hoặc URI otpauth://, mỗi dòng một tài khoản; mã tự đổi theo chu kỳ, tính ngay trên máy. API: <code>GET /api/2fa?secret=&lt;secret&gt;</code> hoặc <code>/api/2fa/&lt;secret&gt;</code>.</p>
           <p class="ct-hint" data-ct-for="keygen" hidden>Khoá được sinh ngay trên máy bằng WebCrypto, không gửi đi đâu. <strong>Giữ bí mật khoá bí mật</strong> — chỉ chia sẻ khoá công khai.</p>
+          <p class="ct-hint" data-ct-for="pwgen" hidden>Password sinh ngay trên máy bằng <code>crypto.getRandomValues</code>, không gửi đi đâu. Mỗi nhóm ký tự được chọn có ít nhất một ký tự; đổi tuỳ chọn là sinh lại.</p>
+          <div class="pw" data-ct-for="pwgen" hidden>
+            <div class="pw-box">
+              <output class="pw-out" id="pwOut" aria-live="polite"></output>
+              <div class="pw-actions">
+                <button class="btn btn--ghost" id="pwRegen" title="Sinh password khác với cùng tuỳ chọn">↻ Đổi password</button>
+                <button class="btn btn--primary" id="pwCopy" disabled>Sao chép</button>
+              </div>
+            </div>
+            <div class="pw-meter" id="pwMeter"><span></span><span></span><span></span><span></span></div>
+            <div class="pw-info" id="pwInfo"></div>
+          </div>
           <div class="kg" data-ct-for="keygen" hidden>
             <div class="kg-info" id="kgInfo" hidden></div>
             <div class="t2j__grid">
