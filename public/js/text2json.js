@@ -663,8 +663,21 @@ export function parseLogRecords(text, opts = {}) {
 }
 
 // ---------- Nhận diện + chuyển ----------
+// Ô CSV / Excel: cả đoạn bọc "…" và mỗi " bên trong nhân đôi thành "" -> gỡ về text gốc.
+// Chỉ gỡ khi bên trong không còn dấu " lẻ nào, để không đụng vào JSON / key-value bình thường
+const CSV_CELL_RE = /^"((?:[^"]|"")*"")(?:[^"]|"")*"$/s;
+function unquoteCsvCell(s) {
+  const t = s.trim();
+  return CSV_CELL_RE.test(t) ? t.slice(1, -1).replace(/""/g, '"') : s;
+}
+export function unquoteCsv(text) {
+  const whole = unquoteCsvCell(text);
+  if (whole !== text) return whole;
+  return text.split('\n').map(unquoteCsvCell).join('\n');
+}
+
 export function detectFormat(text) {
-  const t = text.trim();
+  const t = unquoteCsv(text).trim();
   if (!t) return 'auto';
   const lines = t.split('\n').map((l) => l.trim()).filter(Boolean);
   const code = lines.filter((l) => !/^(\/\/|#|\/\*|\*)/.test(l));
@@ -699,6 +712,7 @@ export function detectFormat(text) {
 }
 
 export function convertToJson(text, { format = 'auto', typed = true } = {}) {
+  text = unquoteCsv(text);
   const fmt = format === 'auto' ? detectFormat(text) : format;
   if (!text.trim()) return { value: null, format: fmt };
   const opts = { typed };
