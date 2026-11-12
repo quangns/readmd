@@ -8,8 +8,7 @@ export const FORMATS = {
   loose: 'JSON / JS object',
   java: 'Java toString (key=value)',
   log: 'Log (tiền tố + JSON / XML)',
-  xml: 'XML / SOAP (giữ thẻ, xuống dòng)',
-  xmljson: 'XML → JSON',
+  xml: 'XML / SOAP (cây thẻ)',
   kv: 'key: value',
   table: 'Bảng (Markdown / CSV / TSV)',
   fields: 'Bảng field → JSON mẫu',
@@ -676,16 +675,9 @@ export function parseLogRecords(text, opts = {}) {
 }
 
 // ---------- XML / SOAP ----------
-// Đọc XML thành cây giữ nguyên thẻ / thuộc tính / comment / CDATA để in lại có xuống dòng, thụt lề (XmlDoc);
-// hoặc chuyển sang JSON (xmlToJson): thuộc tính -> @tên, thẻ lặp -> mảng, text lẫn thẻ con -> #text.
-// Không phụ thuộc DOM
+// Đọc XML thành cây giữ nguyên thẻ / thuộc tính / comment / CDATA để in lại có xuống dòng, thụt lề (XmlDoc).
+// Không chuyển sang JSON. Không phụ thuộc DOM
 const XML_NAME_RE = /[\p{L}_][\p{L}\p{N}_.:\-]*/uy;
-const XML_ENTITIES = { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'" };
-const decodeXml = (s) => s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
-  if (e[0] !== '#') return XML_ENTITIES[e] ?? m;
-  const code = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : Number(e.slice(1));
-  return code <= 0x10ffff ? String.fromCodePoint(code) : m;
-});
 
 /** Tài liệu XML đã đọc: prolog = các dòng <?xml?> / comment / DOCTYPE trước thẻ gốc (nguyên văn) */
 export class XmlDoc {
@@ -806,28 +798,6 @@ function readXml(src, start) {
   return { doc: new XmlDoc(prolog, root), end: i };
 }
 
-/** XmlDoc -> JSON: { gốc: … } */
-export function xmlToJson(doc, opts = {}) {
-  const text = (raw) => (opts.typed === false ? raw : typeValue(raw, opts));
-  const toValue = (el) => {
-    const t = el.children.map((c) => (c.type === 'text' ? decodeXml(c.raw) : c.type === 'cdata' ? c.raw.slice(9, -3) : '')).join('').trim();
-    const kids = el.children.filter((c) => c.type === 'el');
-    if (!el.attrs.length && !kids.length) return t ? text(t) : '';
-    const out = {};
-    for (const a of el.attrs) out[`@${a.name}`] = text(decodeXml(a.raw));
-    for (const child of kids) {
-      const v = toValue(child);
-      // Giá trị một thẻ không bao giờ là mảng nên gặp mảng nghĩa là thẻ đã lặp lại
-      if (!Object.prototype.hasOwnProperty.call(out, child.name)) out[child.name] = v;
-      else if (Array.isArray(out[child.name])) out[child.name].push(v);
-      else out[child.name] = [out[child.name], v];
-    }
-    if (t) out['#text'] = text(t);
-    return out;
-  };
-  return { [doc.root.name]: toValue(doc.root) };
-}
-
 /** Đọc cả đoạn XML; sau thẻ gốc chỉ được còn khoảng trắng / comment */
 export function parseXml(text) {
   const src = text.trim();
@@ -911,7 +881,6 @@ export function convertToJson(text, { format = 'auto', typed = true } = {}) {
       break;
     }
     case 'xml': value = parseXml(text); break;
-    case 'xmljson': value = xmlToJson(parseXml(text), opts); break;
     case 'kv': value = parseKeyValue(text, opts); break;
     case 'table': value = parseTable(text, opts); break;
     case 'fields': value = parseFieldTable(text); break;
