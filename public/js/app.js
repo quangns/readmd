@@ -1,7 +1,9 @@
 // convertSRS — đọc Markdown, xem trực tiếp hoặc xuất PDF / TXT.
 // Thư viện marked, DOMPurify, hljs, mermaid được nạp dạng global từ /vendor.
 import { diagramInfo, toText, slugger, splitFrontmatter, flowchartToSequence, liftDiagramCaptions } from './srs-core.js';
-import { FORMATS as T2J_FORMATS, convertToJson } from './text2json.js';
+import {
+  FORMATS as T2J_FORMATS, convertToJson, XmlDoc, xmlOpenTag, xmlIsInline, xmlCompact, xmlBlockChildren,
+} from './text2json.js';
 import {
   hashBytes, formatDigest, bytesToBase64, base64ToBytes, decodeJwt, utf8Bytes, utf8Text, hexDump,
   KEY_ALGOS, keyAlgoSupported, generateKeys, exportKeys, keyFormats, keyFingerprint, selfTestKeys,
@@ -1367,16 +1369,19 @@ const T2J_SAMPLE = `// Request
 // Response
 { "accessToken": "eyJhbGciOiJIUzI1NiIs...", "refreshToken": "refresh_token_string", "userId": "user_id_string" }`;
 
-// Key dài (vd. cả dòng log làm key): đưa dấu mở { / [ của giá trị xuống dòng mới, lùi thêm 1 cấp
+// Key dài (vd. cả dòng log làm key): đưa dấu mở { / [ của giá trị xuống dòng mới, lùi thêm 1 cấp.
+// XML (XmlDoc) luôn xuống dòng sau key, in nguyên thẻ
 const JSON_LONG_KEY = 40;
 const breakAfterKey = (key, v) =>
-  typeof key === 'string' && JSON.stringify(key).length > JSON_LONG_KEY &&
-  v !== null && typeof v === 'object' && Object.keys(v).length > 0;
+  typeof key === 'string' && (v instanceof XmlDoc || (JSON.stringify(key).length > JSON_LONG_KEY &&
+  v !== null && typeof v === 'object' && Object.keys(v).length > 0));
 // Như JSON.stringify(value, null, ind) nhưng áp dụng quy tắc key dài ở trên (vẫn là JSON hợp lệ)
 function prettyJson(value, ind) {
-  if (!ind) return JSON.stringify(value);
   const unit = typeof ind === 'number' ? ' '.repeat(ind) : ind;
+  if (value instanceof XmlDoc) return value.format(unit);
+  if (!ind) return JSON.stringify(value);
   const ser = (x, pad) => {
+    if (x instanceof XmlDoc) return x.format(unit).replace(/\n/g, `\n${pad}`);
     if (x === null || typeof x !== 'object') return JSON.stringify(x) ?? 'null';
     const isArr = Array.isArray(x);
     const entries = isArr ? x.map((y, i) => [i, y]) : Object.entries(x).filter(([, y]) => y !== undefined);
@@ -1423,12 +1428,12 @@ function runT2j() {
       t2j.records = records;
       if (ind === 0 || !value || typeof value !== 'object') {
         // Thu gọn 1 dòng / giá trị đơn: hiện dạng văn bản
-        t2j.output.innerHTML = `<div class="code-ln" style="--ln-digits:${Math.max(2, String(t2j.json.split('\n').length).length)}">${numberedHtml(hljs.highlight(t2j.json, { language: 'json' }).value)}</div>`;
+        t2jPlain();
         $('#jtBar').hidden = true;
       } else {
         renderJsonTree(value, ind === '\t' ? 4 : ind, records);
       }
-      const count = records ? `${records.length} dòng log` : Array.isArray(value) ? `${value.length} phần tử` : value && typeof value === 'object' ? `${Object.keys(value).length} trường` : '';
+      const count = records ? `${records.length} dòng log` : value instanceof XmlDoc ? '' : Array.isArray(value) ? `${value.length} phần tử` : value && typeof value === 'object' ? `${Object.keys(value).length} trường` : '';
       t2j.status.textContent = `${t2j.format.value === 'auto' ? 'nhận diện: ' : ''}${T2J_FORMATS[format]}${count ? ' · ' + count : ''}`;
     } catch (err) {
       t2j.output.classList.add('is-error');
@@ -1439,6 +1444,11 @@ function runT2j() {
     }
   }
   t2j.copy.disabled = t2j.download.disabled = !t2j.json;
+}
+/** Kết quả dạng văn bản có số dòng (thu gọn 1 dòng / quá lớn để dựng cây) */
+function t2jPlain() {
+  const language = t2j.value instanceof XmlDoc ? 'xml' : 'json';
+  t2j.output.innerHTML = `<div class="code-ln" style="--ln-digits:${Math.max(2, String(t2j.json.split('\n').length).length)}">${numberedHtml(hljs.highlight(t2j.json, { language }).value)}</div>`;
 }
 // ---------- Cây JSON thu gọn được ----------
 // Mỗi object / mảng là một .jt-node: dòng mở (nút ▾, key, dấu mở, tóm tắt khi thu gọn), các con, dòng đóng.
@@ -1460,8 +1470,74 @@ function renderJsonTree(value, indent, records) {
     return h('span', 'hljs-string', JSON.stringify(v));
   };
   const pathText = (path) => '$' + path.map((p) => (typeof p === 'number' ? `[${p}]` : /^[\p{L}_$][\p{L}\p{N}_$]*$/u.test(p) ? `.${p}` : `[${JSON.stringify(p)}]`)).join('');
+  // XML: giữ nguyên thẻ; mỗi thẻ có thẻ con là một .jt-node thu gọn được, sao chép ra đúng đoạn XML đó
+  const xmlHtml = (text, cls) => {
+    const e = h('span', cls);
+    e.innerHTML = hljs.highlight(text, { language: 'xml' }).value; // hljs đã escape nội dung
+    return e;
+  };
+  const xmlLine = (text, lvl) => {
+    const line = h('div', 'jt-line');
+    line.dataset.ln = ++ln;
+    line.style.paddingLeft = `${lvl * indent}ch`;
+    line.append(xmlHtml(text));
+    return line;
+  };
+  const buildXmlEl = (el, path, depth, lvl) => {
+    if (++count > JT_MAX_NODES) throw new Error('too-big');
+    if (xmlIsInline(el)) return xmlLine(xmlCompact(el), lvl);
+    const node = h('div', 'jt-node');
+    node.dataset.depth = depth;
+    node._path = path;
+    node._value = new XmlDoc([], el);
+    const line = h('div', 'jt-line');
+    line.dataset.ln = ++ln;
+    line.style.paddingLeft = `${lvl * indent}ch`;
+    const tog = h('button', 'jt-tog', '▾');
+    tog.type = 'button';
+    tog.title = 'Thu gọn / mở rộng';
+    tog.setAttribute('aria-label', 'Thu gọn / mở rộng');
+    const kids = xmlBlockChildren(el);
+    const actions = h('span', 'jt-actions');
+    for (const [act, label] of [['focus', 'Tập trung'], ['copy', 'Sao chép']]) {
+      const b = h('button', null, label);
+      b.type = 'button';
+      b.dataset.act = act;
+      actions.append(b);
+    }
+    line.append(tog, xmlHtml(xmlOpenTag(el), 'jt-brace'), h('span', 'jt-summary', ` … </${el.name}>`),
+      h('span', 'jt-count', `${kids.filter((c) => c.type === 'el').length} thẻ con`), actions);
+    const children = h('div', 'jt-children');
+    for (const c of kids) {
+      children.append(c.type === 'el'
+        ? buildXmlEl(c, [...path, c.name], depth + 1, lvl + 1)
+        : xmlLine(c.type === 'text' ? c.raw.trim() : c.raw, lvl + 1));
+    }
+    const close = h('div', 'jt-line jt-close');
+    close.dataset.ln = ++ln;
+    close.style.paddingLeft = `${lvl * indent}ch`;
+    close.append(xmlHtml(`</${el.name}>`));
+    node.append(line, children, close);
+    return node;
+  };
+  const buildXml = (doc, key, path, depth, lvl) => {
+    const wrap = h('div', 'jt-xml');
+    if (key !== undefined) {
+      // "tiền tố log": ở dòng riêng, XML xuống dòng dưới và lùi thêm 1 cấp
+      const keyLine = h('div', 'jt-line jt-keyline');
+      keyLine.dataset.ln = ++ln;
+      keyLine.style.paddingLeft = `${lvl * indent}ch`;
+      keyLine.append(h('span', 'hljs-attr', JSON.stringify(key)), h('span', null, ':'));
+      wrap.append(keyLine);
+      lvl++;
+    }
+    for (const p of doc.prolog) wrap.append(xmlLine(p, lvl));
+    wrap.append(buildXmlEl(doc.root, [...path, doc.root.name], depth, lvl));
+    return wrap;
+  };
   // depth: cấp logic (thu gọn theo cấp); lvl: cấp thụt lề hiển thị (lớn hơn depth khi có key dài xuống dòng)
   const build = (v, key, path, depth, last, lvl = depth) => {
+    if (v instanceof XmlDoc) return buildXml(v, key, path, depth, lvl);
     if (++count > JT_MAX_NODES) throw new Error('too-big');
     let pad = `${lvl * indent}ch`;
     const comma = last ? '' : ',';
@@ -1549,7 +1625,7 @@ function renderJsonTree(value, indent, records) {
     tree.style.setProperty('--ln-digits', String(Math.max(2, String(ln).length)));
   } catch {
     // JSON quá lớn: hiện dạng văn bản để không làm chậm trình duyệt
-    t2j.output.innerHTML = `<div class="code-ln" style="--ln-digits:${Math.max(2, String(t2j.json.split('\n').length).length)}">${numberedHtml(hljs.highlight(t2j.json, { language: 'json' }).value)}</div>`;
+    t2jPlain();
     $('#jtBar').hidden = true;
     return;
   }
@@ -1634,16 +1710,17 @@ $('#t2jPaste').addEventListener('click', async () => {
 t2j.copy.addEventListener('click', async () => {
   try {
     await navigator.clipboard.writeText(t2j.json);
-    toast('Đã sao chép JSON.');
+    toast(t2j.value instanceof XmlDoc ? 'Đã sao chép XML.' : 'Đã sao chép JSON.');
   } catch {
     toast('Trình duyệt không cho phép sao chép.', true);
   }
 });
 t2j.download.addEventListener('click', () => {
   // Log nhiều dòng có giữ dòng văn bản gốc -> không phải JSON thuần, tải dạng .txt
-  const ext = t2j.records ? 'txt' : 'json';
+  const ext = t2j.records ? 'txt' : t2j.value instanceof XmlDoc ? 'xml' : 'json';
   const name = `${baseName(state.fileName) || 'du-lieu'}.${ext}`;
-  downloadBlob(new Blob([t2j.json + '\n'], { type: `${ext === 'json' ? 'application/json' : 'text/plain'};charset=utf-8` }), name);
+  const mime = { json: 'application/json', xml: 'application/xml', txt: 'text/plain' }[ext];
+  downloadBlob(new Blob([t2j.json + '\n'], { type: `${mime};charset=utf-8` }), name);
 });
 
 // "Lấy từ tài liệu": khối mã và bảng trong tài liệu đang mở

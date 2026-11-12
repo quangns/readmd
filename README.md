@@ -108,8 +108,9 @@ Chuyển đoạn text sang **JSON chuẩn**, tự nhận diện định dạng �
 |---|---|
 | JSON / JS "lỏng" | Comment, nháy đơn, key không nháy, dấu phẩy thừa; nhiều khối `// Request` / `// Response` gom thành object |
 | **Java `toString()`** | `{key=value, …}`, Lombok `Order(id=1, …)`, IntelliJ `Order{name='x'}`; giá trị có khoảng trắng / dấu phẩy, rỗng, `null` |
-| **Dòng log** | `2026-09-30 … INFO Response: {"error_code":"123"}`: phần chữ phía trước làm key. Nhiều dòng log hiển thị đúng như log gốc (dòng không có JSON giữ nguyên văn bản, dòng có JSON thành `"tiền tố":` rồi JSON lùi 1 cấp; tải về `.txt`). JSON in nhiều dòng vẫn tính là một dòng log. Payload XML / SOAP (`… Output: <?xml …?><soap:Envelope>…`) cũng được parse. Dòng copy từ CSV / Excel (bọc `"…"`, nháy nhân đôi `""`) tự gỡ |
-| **XML / SOAP** | Thuộc tính → `@tên`, thẻ lặp lại → mảng, text lẫn thẻ con → `#text`, giữ tiền tố namespace (`soap:Body`); bỏ qua `<?xml?>`, comment, DOCTYPE; đọc CDATA |
+| **Dòng log** | `2026-09-30 … INFO Response: {"error_code":"123"}`: phần chữ phía trước làm key. Nhiều dòng log hiển thị đúng như log gốc (dòng không có JSON giữ nguyên văn bản, dòng có JSON thành `"tiền tố":` rồi JSON lùi 1 cấp; tải về `.txt`). JSON in nhiều dòng vẫn tính là một dòng log. Payload XML / SOAP (`… Output: <?xml …?><soap:Envelope>…`) được in lại giữ nguyên thẻ, mỗi thẻ một dòng, thu gọn được. Dòng copy từ CSV / Excel (bọc `"…"`, nháy nhân đôi `""`) tự gỡ |
+| **XML / SOAP** | Format lại giữ nguyên thẻ, thuộc tính, namespace, `<?xml?>`, comment, CDATA: mỗi thẻ một dòng, thụt lề, thu gọn / sao chép từng thẻ; tải `.xml` |
+| **XML → JSON** (chọn tay) | Thuộc tính → `@tên`, thẻ lặp lại → mảng, text lẫn thẻ con → `#text`, giữ tiền tố namespace (`soap:Body`) |
 | `key: value` / `key = value` | Thụt lề để lồng nhau, hỗ trợ `a.b.c` |
 | Bảng Markdown / **CSV / TSV** | Dán từ Excel → mảng object |
 | **Bảng mô tả field** | `Field \| Type \| M/O` → JSON mẫu theo kiểu dữ liệu |

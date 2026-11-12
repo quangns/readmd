@@ -8,7 +8,8 @@ export const FORMATS = {
   loose: 'JSON / JS object',
   java: 'Java toString (key=value)',
   log: 'Log (tiền tố + JSON / XML)',
-  xml: 'XML / SOAP',
+  xml: 'XML / SOAP (giữ thẻ, xuống dòng)',
+  xmljson: 'XML → JSON',
   kv: 'key: value',
   table: 'Bảng (Markdown / CSV / TSV)',
   fields: 'Bảng field → JSON mẫu',
@@ -583,7 +584,8 @@ function cleanLogKey(text) {
   return text
     .replace(/\s+/g, ' ')
     .trim()
-    .replace(/[\s:=>\-–—|,]+$/, '')
+    .replace(/[\s:=>\-–—|,"'`]+$/, '')
+    .replace(/^["'`]+/, '') // dòng log copy kèm nháy bọc ngoài
     .trim();
 }
 
@@ -600,8 +602,8 @@ function extractLogEntries(text, opts) {
       // XML / SOAP trong log: "… Output: <?xml …?><soap:Envelope …>…</soap:Envelope>"
       if (!/^<(\?xml|!--|[\p{L}_])/iu.test(src.slice(k, k + 6))) continue;
       let xml;
-      try { xml = readXml(src, k, opts); } catch { continue; }
-      entries.push({ prefix: src.slice(cursor, k), value: xml.value, start: k, end: xml.end });
+      try { xml = readXml(src, k); } catch { continue; }
+      entries.push({ prefix: src.slice(cursor, k), value: xml.doc, start: k, end: xml.end });
       cursor = xml.end;
       k = xml.end - 1;
       continue;
@@ -674,9 +676,9 @@ export function parseLogRecords(text, opts = {}) {
 }
 
 // ---------- XML / SOAP ----------
-// <a x="1"><b>2</b><b>3</b><c/></a> -> { a: { "@x": 1, b: [2, 3], c: "" } }
-// Thuộc tính thêm tiền tố @, text lẫn với thẻ con / thuộc tính đặt ở "#text", thẻ lặp lại gom thành mảng,
-// giữ nguyên tiền tố namespace (soap:Body). Bỏ qua <?xml?>, comment, DOCTYPE; đọc CDATA như text
+// Đọc XML thành cây giữ nguyên thẻ / thuộc tính / comment / CDATA để in lại có xuống dòng, thụt lề (XmlDoc);
+// hoặc chuyển sang JSON (xmlToJson): thuộc tính -> @tên, thẻ lặp -> mảng, text lẫn thẻ con -> #text.
+// Không phụ thuộc DOM
 const XML_NAME_RE = /[\p{L}_][\p{L}\p{N}_.:\-]*/uy;
 const XML_ENTITIES = { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'" };
 const decodeXml = (s) => s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
@@ -685,17 +687,53 @@ const decodeXml = (s) => s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
   return code <= 0x10ffff ? String.fromCodePoint(code) : m;
 });
 
-/** Đọc một tài liệu XML bắt đầu tại `start`; trả { value: { gốc: … }, end } (end = vị trí sau thẻ đóng gốc) */
-function readXml(src, start, opts = {}) {
+/** Tài liệu XML đã đọc: prolog = các dòng <?xml?> / comment / DOCTYPE trước thẻ gốc (nguyên văn) */
+export class XmlDoc {
+  constructor(prolog, root) { this.prolog = prolog; this.root = root; }
+  /** In đẹp: unit = chuỗi thụt lề 1 cấp; unit rỗng -> một dòng */
+  format(unit = '  ') {
+    if (!unit) return [...this.prolog, xmlCompact(this.root)].join('');
+    return [...this.prolog, ...xmlLines(this.root, unit)].join('\n');
+  }
+  toJSON() { return this.format(''); }
+}
+
+/** Thẻ mở nguyên văn (thuộc tính giữ đúng nháy và giá trị gốc) */
+export function xmlOpenTag(el) {
+  const attrs = el.attrs.map((a) => ` ${a.name}=${a.q}${a.raw}${a.q}`).join('');
+  return `<${el.name}${attrs}${el.selfClose ? ' />' : '>'}`;
+}
+const xmlItemText = (c) => (c.type === 'text' ? c.raw.trim() : c.raw);
+/** Thẻ in trên một dòng: tự đóng, rỗng hoặc chỉ chứa text / CDATA */
+export const xmlIsInline = (el) => el.selfClose || el.children.every((c) => c.type === 'text' || c.type === 'cdata');
+/** Cả thẻ trên một dòng (bỏ khoảng trắng thừa giữa các thẻ) */
+export function xmlCompact(el) {
+  if (el.selfClose) return xmlOpenTag(el);
+  const inner = el.children.map((c) => (c.type === 'el' ? xmlCompact(c) : xmlItemText(c))).join('');
+  return `${xmlOpenTag(el)}${inner}</${el.name}>`;
+}
+/** Các con hiển thị của một thẻ nhiều dòng (bỏ text chỉ có khoảng trắng) */
+export const xmlBlockChildren = (el) => el.children.filter((c) => c.type !== 'text' || c.raw.trim());
+function xmlLines(el, unit, pad = '') {
+  if (xmlIsInline(el)) return [pad + xmlCompact(el)];
+  const inner = pad + unit;
+  const body = xmlBlockChildren(el).flatMap((c) => (c.type === 'el' ? xmlLines(c, unit, inner) : [inner + xmlItemText(c)]));
+  return [pad + xmlOpenTag(el), ...body, `${pad}</${el.name}>`];
+}
+
+/** Đọc một tài liệu XML bắt đầu tại `start`; trả { doc: XmlDoc, end } (end = vị trí sau thẻ đóng gốc) */
+function readXml(src, start) {
   let i = start;
   const fail = (msg) => {
     const before = src.slice(0, i).split('\n');
     throw new ConvertError(`XML: ${msg}`, before.length, before[before.length - 1].length + 1);
   };
-  const skipTo = (token) => {
+  const until = (token) => {
     const k = src.indexOf(token, i);
     if (k < 0) fail(`thiếu "${token}"`);
+    const raw = src.slice(i, k + token.length);
     i = k + token.length;
+    return raw;
   };
   const readName = () => {
     XML_NAME_RE.lastIndex = i;
@@ -705,63 +743,79 @@ function readXml(src, start, opts = {}) {
     return m[0];
   };
   const skipWs = () => { while (/\s/.test(src[i] || '')) i++; };
-  const text = (raw) => (opts.typed === false ? raw : typeValue(raw, opts));
 
   function element() {
     i++; // '<'
-    const name = readName();
-    const attrs = [];
+    const el = { type: 'el', name: readName(), attrs: [], children: [], selfClose: false };
     for (;;) {
       skipWs();
-      if (src.startsWith('/>', i)) { i += 2; return { name, attrs, children: [], text: '' }; }
+      if (src.startsWith('/>', i)) { i += 2; el.selfClose = true; return el; }
       if (src[i] === '>') { i++; break; }
-      const attr = readName();
+      const name = readName();
       skipWs();
-      if (src[i] !== '=') fail(`thuộc tính "${attr}" thiếu "="`);
+      if (src[i] !== '=') fail(`thuộc tính "${name}" thiếu "="`);
       i++;
       skipWs();
       const q = src[i];
-      if (q !== '"' && q !== "'") fail(`giá trị thuộc tính "${attr}" phải nằm trong nháy`);
+      if (q !== '"' && q !== "'") fail(`giá trị thuộc tính "${name}" phải nằm trong nháy`);
       const close = src.indexOf(q, i + 1);
-      if (close < 0) fail(`giá trị thuộc tính "${attr}" thiếu nháy đóng`);
-      attrs.push([attr, decodeXml(src.slice(i + 1, close))]);
+      if (close < 0) fail(`giá trị thuộc tính "${name}" thiếu nháy đóng`);
+      el.attrs.push({ name, q, raw: src.slice(i + 1, close) });
       i = close + 1;
     }
-    const children = [];
-    let body = '';
     for (;;) {
-      if (i >= src.length) fail(`thẻ <${name}> chưa đóng`);
+      if (i >= src.length) fail(`thẻ <${el.name}> chưa đóng`);
       if (src.startsWith('</', i)) {
         i += 2;
         const closeName = readName();
-        if (closeName !== name) fail(`thẻ đóng </${closeName}> không khớp <${name}>`);
+        if (closeName !== el.name) fail(`thẻ đóng </${closeName}> không khớp <${el.name}>`);
         skipWs();
-        if (src[i] !== '>') fail(`thẻ đóng </${name}> thiếu ">"`);
+        if (src[i] !== '>') fail(`thẻ đóng </${el.name}> thiếu ">"`);
         i++;
-        return { name, attrs, children, text: body };
+        return el;
       }
-      if (src.startsWith('<!--', i)) skipTo('-->');
-      else if (src.startsWith('<![CDATA[', i)) {
-        const k = src.indexOf(']]>', i);
-        if (k < 0) fail('CDATA thiếu "]]>"');
-        body += src.slice(i + 9, k);
-        i = k + 3;
-      } else if (src.startsWith('<?', i)) skipTo('?>');
-      else if (src[i] === '<') children.push(element());
+      if (src.startsWith('<!--', i)) el.children.push({ type: 'comment', raw: until('-->') });
+      else if (src.startsWith('<![CDATA[', i)) el.children.push({ type: 'cdata', raw: until(']]>') });
+      else if (src.startsWith('<?', i)) el.children.push({ type: 'pi', raw: until('?>') });
+      else if (src[i] === '<') el.children.push(element());
       else {
         const k = src.indexOf('<', i);
-        body += decodeXml(src.slice(i, k < 0 ? src.length : k));
+        el.children.push({ type: 'text', raw: src.slice(i, k < 0 ? src.length : k) });
         i = k < 0 ? src.length : k;
       }
     }
   }
 
-  function toValue(node) {
-    const t = node.text.trim();
-    if (!node.attrs.length && !node.children.length) return t ? text(t) : '';
+  // Phần mở đầu: <?xml …?>, comment, <!DOCTYPE …>
+  const prolog = [];
+  for (;;) {
+    skipWs();
+    if (src.startsWith('<?', i)) prolog.push(until('?>'));
+    else if (src.startsWith('<!--', i)) prolog.push(until('-->'));
+    else if (/^<!DOCTYPE/i.test(src.slice(i, i + 9))) {
+      const from = i;
+      const bracket = src.indexOf('[', i);
+      const gt = src.indexOf('>', i);
+      if (bracket >= 0 && bracket < gt) { i = bracket; until(']'); }
+      until('>');
+      prolog.push(src.slice(from, i));
+    } else break;
+  }
+  if (src[i] !== '<') fail('không tìm thấy thẻ gốc');
+  const root = element();
+  return { doc: new XmlDoc(prolog, root), end: i };
+}
+
+/** XmlDoc -> JSON: { gốc: … } */
+export function xmlToJson(doc, opts = {}) {
+  const text = (raw) => (opts.typed === false ? raw : typeValue(raw, opts));
+  const toValue = (el) => {
+    const t = el.children.map((c) => (c.type === 'text' ? decodeXml(c.raw) : c.type === 'cdata' ? c.raw.slice(9, -3) : '')).join('').trim();
+    const kids = el.children.filter((c) => c.type === 'el');
+    if (!el.attrs.length && !kids.length) return t ? text(t) : '';
     const out = {};
-    for (const [k, v] of node.attrs) out[`@${k}`] = text(v);
-    for (const child of node.children) {
+    for (const a of el.attrs) out[`@${a.name}`] = text(decodeXml(a.raw));
+    for (const child of kids) {
       const v = toValue(child);
       // Giá trị một thẻ không bao giờ là mảng nên gặp mảng nghĩa là thẻ đã lặp lại
       if (!Object.prototype.hasOwnProperty.call(out, child.name)) out[child.name] = v;
@@ -770,35 +824,20 @@ function readXml(src, start, opts = {}) {
     }
     if (t) out['#text'] = text(t);
     return out;
-  }
-
-  // Phần mở đầu: <?xml …?>, comment, <!DOCTYPE …>
-  for (;;) {
-    skipWs();
-    if (src.startsWith('<?', i)) skipTo('?>');
-    else if (src.startsWith('<!--', i)) skipTo('-->');
-    else if (/^<!DOCTYPE/i.test(src.slice(i, i + 9))) {
-      const bracket = src.indexOf('[', i);
-      const gt = src.indexOf('>', i);
-      if (bracket >= 0 && bracket < gt) { i = bracket; skipTo(']'); }
-      skipTo('>');
-    } else break;
-  }
-  if (src[i] !== '<') fail('không tìm thấy thẻ gốc');
-  const root = element();
-  return { value: { [root.name]: toValue(root) }, end: i };
+  };
+  return { [doc.root.name]: toValue(doc.root) };
 }
 
-/** Parse cả đoạn XML; sau thẻ gốc chỉ được còn khoảng trắng / comment */
-export function parseXml(text, opts = {}) {
+/** Đọc cả đoạn XML; sau thẻ gốc chỉ được còn khoảng trắng / comment */
+export function parseXml(text) {
   const src = text.trim();
-  const { value, end } = readXml(src, 0, opts);
+  const { doc, end } = readXml(src, 0);
   const rest = src.slice(end).replace(/<!--[\s\S]*?-->/g, '').trim();
   if (rest) {
     const before = src.slice(0, end).split('\n');
     throw new ConvertError('XML: còn nội dung sau thẻ gốc', before.length, before[before.length - 1].length + 1);
   }
-  return value;
+  return doc;
 }
 
 // ---------- Nhận diện + chuyển ----------
@@ -871,7 +910,8 @@ export function convertToJson(text, { format = 'auto', typed = true } = {}) {
       value = records[0];
       break;
     }
-    case 'xml': value = parseXml(text, opts); break;
+    case 'xml': value = parseXml(text); break;
+    case 'xmljson': value = xmlToJson(parseXml(text), opts); break;
     case 'kv': value = parseKeyValue(text, opts); break;
     case 'table': value = parseTable(text, opts); break;
     case 'fields': value = parseFieldTable(text); break;
