@@ -342,6 +342,39 @@ function cleanLabel(s) {
 // Ký tự đặc biệt trong nhãn sequence: ; # bị Mermaid hiểu sai -> dùng entity code
 const seqText = (s) => s.replace(/[#;]/g, (c) => (c === '#' ? '#35;' : '#59;'));
 
+// sequenceDiagram viết tay: ";" là dấu kết thúc câu lệnh nên "Bearer token; phoneNumber" trong nội dung tin nhắn /
+// ghi chú / nhãn khối làm sơ đồ lỗi -> đổi thành #59; (Mermaid vẫn hiển thị ";").
+// Giữ nguyên khi sau ";" là một câu lệnh thật (A->>B: x; B-->>A: y) hoặc ";" ở cuối dòng; giữ các entity #xx; có sẵn
+const SEQ_ARROW = String.raw`(?:<<-{1,2}>>|-{1,2}>>|-{1,2}>|-{1,2}x|-{1,2}\))`;
+const SEQ_MSG_RE = new RegExp(String.raw`^(\s*[^:%\s][^:]*?${SEQ_ARROW}[+-]?[^:]*?:)(.*)$`);
+const SEQ_NOTE_RE = /^(\s*note\s+(?:left of|right of|over)\s[^:]*:)(.*)$/i;
+const SEQ_BLOCK_RE = /^(\s*(?:alt|else|opt|loop|par|and|critical|option|break)(?=\s))(.*)$/i;
+const SEQ_STMT_RE = new RegExp(String.raw`^(?:[^:;]*?${SEQ_ARROW}|(?:note|alt|else|end|opt|loop|par|and|critical|option|break|rect|box|activate|deactivate|participant|actor|create|destroy|autonumber|links?|properties|details)\b|%%)`, 'i');
+function escapeSeqText(text) {
+  let out = '';
+  let rest = text;
+  for (;;) {
+    const m = /(#\w+;)|;/.exec(rest);
+    if (!m) return out + rest;
+    out += rest.slice(0, m.index);
+    rest = rest.slice(m.index + m[0].length);
+    if (m[1]) { out += m[1]; continue; }
+    // ";" cuối dòng hoặc trước một câu lệnh thật: đúng là dấu kết thúc
+    if (!rest.trim() || SEQ_STMT_RE.test(rest.trim())) return `${out};${rest}`;
+    out += '#59;';
+  }
+}
+export function escapeSequenceSemicolons(src) {
+  const lines = src.split('\n');
+  const first = lines.find((l) => l.trim() && !/^\s*%%/.test(l));
+  if (!first || !/^\s*sequenceDiagram\b/.test(first)) return src;
+  return lines.map((line) => {
+    if (!line.includes(';') || /^\s*%%/.test(line)) return line;
+    const m = SEQ_NOTE_RE.exec(line) || SEQ_BLOCK_RE.exec(line) || SEQ_MSG_RE.exec(line);
+    return m ? m[1] + escapeSeqText(m[2]) : line;
+  }).join('\n');
+}
+
 function splitStatements(line) {
   const out = [];
   let cur = '';

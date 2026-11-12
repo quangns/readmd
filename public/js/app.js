@@ -1,6 +1,8 @@
 // convertSRS — đọc Markdown, xem trực tiếp hoặc xuất PDF / TXT.
 // Thư viện marked, DOMPurify, hljs, mermaid được nạp dạng global từ /vendor.
-import { diagramInfo, toText, slugger, splitFrontmatter, flowchartToSequence, liftDiagramCaptions } from './srs-core.js';
+import {
+  diagramInfo, toText, slugger, splitFrontmatter, flowchartToSequence, liftDiagramCaptions, escapeSequenceSemicolons,
+} from './srs-core.js';
 import {
   FORMATS as T2J_FORMATS, convertToJson, XmlDoc, xmlOpenTag, xmlIsInline, xmlCompact, xmlBlockChildren,
 } from './text2json.js';
@@ -185,7 +187,7 @@ function renderMermaid(src, theme) {
     mermaid.initialize({ ...MERMAID_BASE, themeVariables: MERMAID_THEMES[theme] });
     const id = `mmd-${++mermaidSeq}`;
     try {
-      return (await mermaid.render(id, src)).svg;
+      return (await mermaid.render(id, escapeSequenceSemicolons(src))).svg;
     } finally {
       document.getElementById(id)?.remove();
       document.getElementById('d' + id)?.remove();
