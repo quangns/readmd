@@ -426,6 +426,21 @@ function isProcessFlow(nodes) {
   return sentences * 2 >= list.length;
 }
 
+// Sơ đồ tương tác giữa các hệ thống (A -->|"1. Gọi API"| B, B -.->|"2. Trả kết quả"| A): node là các bên,
+// nhãn cạnh là thông điệp, có cả chiều đi lẫn chiều về -> mỗi node một cột, không coi là luồng nghiệp vụ
+function isInteraction(nodes, edges) {
+  const list = [...nodes.values()];
+  if (list.some((n) => DECISION_SHAPES.has(n.shape) || TERMINAL_RE.test(n.label.trim()))) return false;
+  const live = edges.filter((e) => e.from !== e.to && e.kind !== 'hidden');
+  if (!live.length || live.filter((e) => e.label).length * 2 < live.length) return false;
+  // Luồng nghiệp vụ có vòng lặp ("Nhập OTP" -Sai-> quay lại) cũng có chiều về, nhưng câu mô tả nằm ở node,
+  // nhãn cạnh ngắn (Có / Sai / Gửi); sơ đồ tương tác thì ngược lại: thông điệp ở cạnh dài hơn tên node
+  const words = (list) => list.reduce((sum, t) => sum + t.trim().split(/\s+/).length, 0) / list.length;
+  if (words(live.filter((e) => e.label).map((e) => e.label)) <= words(list.map((n) => n.label))) return false;
+  const pairs = new Set(live.map((e) => `${e.from}\u0000${e.to}`));
+  return live.some((e) => e.kind === 'both' || pairs.has(`${e.to}\u0000${e.from}`));
+}
+
 // Số bước tác giả viết ở đầu nhãn: "3." "3b." "10b." "2.1a)" "Bước 4:" -> { no: '3b', key: [3, 2] }
 const STEP_NO_RE = /^\s*(?:bước\s*)?(\d+[a-z]?(?:\.\d+[a-z]?)*)[.):]?\s+/i;
 function stepNumber(label) {
@@ -946,7 +961,7 @@ export function flowchartToSequence(src) {
     if (n) { n.label = n.label === id ? title : n.label; n.box = -1; }
   }
 
-  if (isProcessFlow(nodes)) {
+  if (!isInteraction(nodes, edges) && isProcessFlow(nodes)) {
     const seq = processSequence({ nodes, edges: edges.filter((e) => e.kind !== 'hidden'), boxes, front });
     if (seq) return seq;
   }
@@ -977,10 +992,22 @@ export function flowchartToSequence(src) {
   // Nhiều cột: thu hẹp cột và khoảng cách riêng cho sơ đồ này để vừa khổ trang mà chữ không co quá nhỏ
   const count = [...nodes.values()].filter((n) => used.has(n.id) && !decisions.has(n.id)).length;
   const init = count > 9 ? { width: 100, actorMargin: 6 } : count > 6 ? { width: 108, actorMargin: 10 } : null;
-  const out = [front + (init ? `%%{init: ${JSON.stringify({ sequence: init })}}%%\n` : '') + 'sequenceDiagram', '    autonumber'];
+  const out = [front + (init ? `%%{init: ${JSON.stringify({ sequence: init })}}%%\n` : '') + 'sequenceDiagram'];
+  // Tác giả đã đánh số trên nhãn ("1. Gọi API…") thì không thêm số tự động
+  if (!edges.some((e) => stepNumber(e.label))) out.push('    autonumber');
+  // Node hình trụ [( )] là cơ sở dữ liệu / bảng log -> cột dạng database
+  const isDb = (n) => /^(?:\[\(|cyl|cylinder|db|database|das|lin-cyl|h-cyl|horizontal-cylinder)$/.test(n.shape);
+  // Tên dài không có khoảng trắng (OPENAPI_MNP_TRANS_LOG): Mermaid ngắt giữa chữ "OPENAPI_MN-P…" -> tự ngắt ở dấu _
+  const actorName = (label) => seqText(label).split(' ').map((w) => (w.length <= 14 || !w.includes('_') ? w
+    : w.split(/(?<=_)/).reduce((lines, part) => {
+      if (lines.length && (lines[lines.length - 1] + part).length <= 14) lines[lines.length - 1] += part;
+      else lines.push(part);
+      return lines;
+    }, []).join('<br/>'))).join(' ');
   const declare = (n, indent) => {
+    if (isDb(n)) return out.push(`${indent}participant ${pid(n.id)}@{ "type": "database" } as ${actorName(n.label)}`);
     const kw = ACTOR_RE.test(n.label) ? 'actor' : 'participant';
-    out.push(`${indent}${kw} ${pid(n.id)} as ${seqText(n.label)}`);
+    out.push(`${indent}${kw} ${pid(n.id)} as ${actorName(n.label)}`);
   };
   const ordered = [...nodes.values()].filter((n) => used.has(n.id) && !decisions.has(n.id)).sort((a, b) => a.order - b.order);
   const emittedBox = new Set();
