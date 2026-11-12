@@ -1,6 +1,6 @@
 # convertSRS — Đọc Markdown, xuất PDF / TXT, sơ đồ Mermaid vector
 
-> Công cụ web và ứng dụng Windows để **đọc tài liệu đặc tả yêu cầu phần mềm (SRS) viết bằng Markdown**, **chuyển Markdown sang PDF** có mục lục, trang bìa, đánh số trang và **sơ đồ Mermaid dạng vector**. Kèm bộ công cụ cho lập trình viên: **Text → JSON** (format JSON, chuyển log / Java `toString()` / CSV sang JSON), **SHA-256 / HMAC**, **Base64 encode / decode**, **giải mã JWT**, **sinh cặp khoá RSA / ECDSA / Ed25519**, **mã 2FA (TOTP)** và **sinh password ngẫu nhiên**. Mọi xử lý mã hoá chạy ngay trên trình duyệt, dữ liệu không rời khỏi máy.
+> Công cụ web và ứng dụng Windows để **đọc tài liệu đặc tả yêu cầu phần mềm (SRS) viết bằng Markdown**, **chuyển Markdown sang PDF** có mục lục, trang bìa, đánh số trang và **sơ đồ Mermaid dạng vector**. Kèm bộ công cụ cho lập trình viên: **Text → JSON** (format JSON, chuyển log / XML / SOAP / Java `toString()` / CSV sang JSON), **SHA-256 / HMAC**, **Base64 encode / decode**, **giải mã JWT**, **sinh cặp khoá RSA / ECDSA / Ed25519**, **mã 2FA (TOTP)** và **sinh password ngẫu nhiên**. Mọi xử lý mã hoá chạy ngay trên trình duyệt, dữ liệu không rời khỏi máy.
 
 [![Node.js ≥ 20](https://img.shields.io/badge/Node.js-%E2%89%A5%2020-339933?logo=node.js&logoColor=white)](#chạy-local)
 [![Deploy on Vercel](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel&logoColor=white)](#deploy-lên-vercel)
@@ -8,7 +8,7 @@
 [![Mermaid](https://img.shields.io/badge/Diagrams-Mermaid-FF3670?logo=mermaid&logoColor=white)](#sơ-đồ-mermaid)
 [![Vanilla JS](https://img.shields.io/badge/Frontend-Vanilla%20JS-F7DF1E?logo=javascript&logoColor=black)](#kiến-trúc--công-nghệ)
 
-**Từ khoá:** Markdown to PDF · Markdown viewer · SRS document · Mermaid to PDF / SVG / PNG · flowchart to sequence diagram · JSON formatter · log to JSON · Java toString to JSON · CSV to JSON · SHA-256 online · HMAC · Base64 encoder / decoder · JWT decoder · RSA / ECDSA / Ed25519 key generator · PEM / JWK · TOTP 2FA · password generator · Vercel · Electron.
+**Từ khoá:** Markdown to PDF · Markdown viewer · SRS document · Mermaid to PDF / SVG / PNG · flowchart to sequence diagram · JSON formatter · log to JSON · XML to JSON · SOAP to JSON · Java toString to JSON · CSV to JSON · SHA-256 online · HMAC · Base64 encoder / decoder · JWT decoder · RSA / ECDSA / Ed25519 key generator · PEM / JWK · TOTP 2FA · password generator · Vercel · Electron.
 
 **🌐 Dùng thử ngay:** [readmd-flax.vercel.app](https://readmd-flax.vercel.app) · Mở thẳng [Text → JSON](https://readmd-flax.vercel.app/#json) · [Mã hoá / Base64](https://readmd-flax.vercel.app/#crypto)
 
@@ -108,7 +108,8 @@ Chuyển đoạn text sang **JSON chuẩn**, tự nhận diện định dạng �
 |---|---|
 | JSON / JS "lỏng" | Comment, nháy đơn, key không nháy, dấu phẩy thừa; nhiều khối `// Request` / `// Response` gom thành object |
 | **Java `toString()`** | `{key=value, …}`, Lombok `Order(id=1, …)`, IntelliJ `Order{name='x'}`; giá trị có khoảng trắng / dấu phẩy, rỗng, `null` |
-| **Dòng log** | `2026-09-30 … INFO Response: {"error_code":"123"}`: phần chữ phía trước làm key. Nhiều dòng log hiển thị đúng như log gốc (dòng không có JSON giữ nguyên văn bản, dòng có JSON thành `"tiền tố":` rồi JSON lùi 1 cấp; tải về `.txt`). JSON in nhiều dòng vẫn tính là một dòng log |
+| **Dòng log** | `2026-09-30 … INFO Response: {"error_code":"123"}`: phần chữ phía trước làm key. Nhiều dòng log hiển thị đúng như log gốc (dòng không có JSON giữ nguyên văn bản, dòng có JSON thành `"tiền tố":` rồi JSON lùi 1 cấp; tải về `.txt`). JSON in nhiều dòng vẫn tính là một dòng log. Payload XML / SOAP (`… Output: <?xml …?><soap:Envelope>…`) cũng được parse. Dòng copy từ CSV / Excel (bọc `"…"`, nháy nhân đôi `""`) tự gỡ |
+| **XML / SOAP** | Thuộc tính → `@tên`, thẻ lặp lại → mảng, text lẫn thẻ con → `#text`, giữ tiền tố namespace (`soap:Body`); bỏ qua `<?xml?>`, comment, DOCTYPE; đọc CDATA |
 | `key: value` / `key = value` | Thụt lề để lồng nhau, hỗ trợ `a.b.c` |
 | Bảng Markdown / **CSV / TSV** | Dán từ Excel → mảng object |
 | **Bảng mô tả field** | `Field \| Type \| M/O` → JSON mẫu theo kiểu dữ liệu |

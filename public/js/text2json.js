@@ -1,13 +1,14 @@
 // Chuyển đoạn text sang JSON — dùng cho tab "Text → JSON".
 // Hỗ trợ: JSON/JS lỏng (comment, nháy đơn, key không nháy, dấu phẩy thừa, nhiều khối có nhãn),
 // key: value / key = value (thụt lề lồng nhau, dotted key), bảng Markdown / CSV / TSV,
-// bảng mô tả field của API -> JSON mẫu, query string. Không phụ thuộc DOM.
+// bảng mô tả field của API -> JSON mẫu, query string, XML / SOAP. Không phụ thuộc DOM.
 
 export const FORMATS = {
   auto: 'Tự nhận diện',
   loose: 'JSON / JS object',
   java: 'Java toString (key=value)',
-  log: 'Log (tiền tố + JSON)',
+  log: 'Log (tiền tố + JSON / XML)',
+  xml: 'XML / SOAP',
   kv: 'key: value',
   table: 'Bảng (Markdown / CSV / TSV)',
   fields: 'Bảng field → JSON mẫu',
@@ -590,11 +591,21 @@ function cleanLogKey(text) {
 function extractLogEntries(text, opts) {
   let src = text.trim();
   // Cả chuỗi được bọc trong nháy: '…{…}…' hoặc "…{…}…"
-  if (/^(['"`]).*\1$/s.test(src) && /[{[]/.test(src.slice(1, -1))) src = src.slice(1, -1);
+  if (/^(['"`]).*\1$/s.test(src) && /[{[<]/.test(src.slice(1, -1))) src = src.slice(1, -1);
   const entries = [];
   let cursor = 0;
   for (let k = 0; k < src.length; k++) {
     const c = src[k];
+    if (c === '<') {
+      // XML / SOAP trong log: "… Output: <?xml …?><soap:Envelope …>…</soap:Envelope>"
+      if (!/^<(\?xml|!--|[\p{L}_])/iu.test(src.slice(k, k + 6))) continue;
+      let xml;
+      try { xml = readXml(src, k, opts); } catch { continue; }
+      entries.push({ prefix: src.slice(cursor, k), value: xml.value, start: k, end: xml.end });
+      cursor = xml.end;
+      k = xml.end - 1;
+      continue;
+    }
     if (c !== '{' && c !== '[') continue;
     const end = matchBracket(src, k);
     if (end < 0) continue;
@@ -662,6 +673,134 @@ export function parseLogRecords(text, opts = {}) {
   return records;
 }
 
+// ---------- XML / SOAP ----------
+// <a x="1"><b>2</b><b>3</b><c/></a> -> { a: { "@x": 1, b: [2, 3], c: "" } }
+// Thuộc tính thêm tiền tố @, text lẫn với thẻ con / thuộc tính đặt ở "#text", thẻ lặp lại gom thành mảng,
+// giữ nguyên tiền tố namespace (soap:Body). Bỏ qua <?xml?>, comment, DOCTYPE; đọc CDATA như text
+const XML_NAME_RE = /[\p{L}_][\p{L}\p{N}_.:\-]*/uy;
+const XML_ENTITIES = { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'" };
+const decodeXml = (s) => s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
+  if (e[0] !== '#') return XML_ENTITIES[e] ?? m;
+  const code = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : Number(e.slice(1));
+  return code <= 0x10ffff ? String.fromCodePoint(code) : m;
+});
+
+/** Đọc một tài liệu XML bắt đầu tại `start`; trả { value: { gốc: … }, end } (end = vị trí sau thẻ đóng gốc) */
+function readXml(src, start, opts = {}) {
+  let i = start;
+  const fail = (msg) => {
+    const before = src.slice(0, i).split('\n');
+    throw new ConvertError(`XML: ${msg}`, before.length, before[before.length - 1].length + 1);
+  };
+  const skipTo = (token) => {
+    const k = src.indexOf(token, i);
+    if (k < 0) fail(`thiếu "${token}"`);
+    i = k + token.length;
+  };
+  const readName = () => {
+    XML_NAME_RE.lastIndex = i;
+    const m = XML_NAME_RE.exec(src);
+    if (!m) fail('tên thẻ không hợp lệ');
+    i += m[0].length;
+    return m[0];
+  };
+  const skipWs = () => { while (/\s/.test(src[i] || '')) i++; };
+  const text = (raw) => (opts.typed === false ? raw : typeValue(raw, opts));
+
+  function element() {
+    i++; // '<'
+    const name = readName();
+    const attrs = [];
+    for (;;) {
+      skipWs();
+      if (src.startsWith('/>', i)) { i += 2; return { name, attrs, children: [], text: '' }; }
+      if (src[i] === '>') { i++; break; }
+      const attr = readName();
+      skipWs();
+      if (src[i] !== '=') fail(`thuộc tính "${attr}" thiếu "="`);
+      i++;
+      skipWs();
+      const q = src[i];
+      if (q !== '"' && q !== "'") fail(`giá trị thuộc tính "${attr}" phải nằm trong nháy`);
+      const close = src.indexOf(q, i + 1);
+      if (close < 0) fail(`giá trị thuộc tính "${attr}" thiếu nháy đóng`);
+      attrs.push([attr, decodeXml(src.slice(i + 1, close))]);
+      i = close + 1;
+    }
+    const children = [];
+    let body = '';
+    for (;;) {
+      if (i >= src.length) fail(`thẻ <${name}> chưa đóng`);
+      if (src.startsWith('</', i)) {
+        i += 2;
+        const closeName = readName();
+        if (closeName !== name) fail(`thẻ đóng </${closeName}> không khớp <${name}>`);
+        skipWs();
+        if (src[i] !== '>') fail(`thẻ đóng </${name}> thiếu ">"`);
+        i++;
+        return { name, attrs, children, text: body };
+      }
+      if (src.startsWith('<!--', i)) skipTo('-->');
+      else if (src.startsWith('<![CDATA[', i)) {
+        const k = src.indexOf(']]>', i);
+        if (k < 0) fail('CDATA thiếu "]]>"');
+        body += src.slice(i + 9, k);
+        i = k + 3;
+      } else if (src.startsWith('<?', i)) skipTo('?>');
+      else if (src[i] === '<') children.push(element());
+      else {
+        const k = src.indexOf('<', i);
+        body += decodeXml(src.slice(i, k < 0 ? src.length : k));
+        i = k < 0 ? src.length : k;
+      }
+    }
+  }
+
+  function toValue(node) {
+    const t = node.text.trim();
+    if (!node.attrs.length && !node.children.length) return t ? text(t) : '';
+    const out = {};
+    for (const [k, v] of node.attrs) out[`@${k}`] = text(v);
+    for (const child of node.children) {
+      const v = toValue(child);
+      // Giá trị một thẻ không bao giờ là mảng nên gặp mảng nghĩa là thẻ đã lặp lại
+      if (!Object.prototype.hasOwnProperty.call(out, child.name)) out[child.name] = v;
+      else if (Array.isArray(out[child.name])) out[child.name].push(v);
+      else out[child.name] = [out[child.name], v];
+    }
+    if (t) out['#text'] = text(t);
+    return out;
+  }
+
+  // Phần mở đầu: <?xml …?>, comment, <!DOCTYPE …>
+  for (;;) {
+    skipWs();
+    if (src.startsWith('<?', i)) skipTo('?>');
+    else if (src.startsWith('<!--', i)) skipTo('-->');
+    else if (/^<!DOCTYPE/i.test(src.slice(i, i + 9))) {
+      const bracket = src.indexOf('[', i);
+      const gt = src.indexOf('>', i);
+      if (bracket >= 0 && bracket < gt) { i = bracket; skipTo(']'); }
+      skipTo('>');
+    } else break;
+  }
+  if (src[i] !== '<') fail('không tìm thấy thẻ gốc');
+  const root = element();
+  return { value: { [root.name]: toValue(root) }, end: i };
+}
+
+/** Parse cả đoạn XML; sau thẻ gốc chỉ được còn khoảng trắng / comment */
+export function parseXml(text, opts = {}) {
+  const src = text.trim();
+  const { value, end } = readXml(src, 0, opts);
+  const rest = src.slice(end).replace(/<!--[\s\S]*?-->/g, '').trim();
+  if (rest) {
+    const before = src.slice(0, end).split('\n');
+    throw new ConvertError('XML: còn nội dung sau thẻ gốc', before.length, before[before.length - 1].length + 1);
+  }
+  return value;
+}
+
 // ---------- Nhận diện + chuyển ----------
 // Ô CSV / Excel: cả đoạn bọc "…" và mỗi " bên trong nhân đôi thành "" -> gỡ về text gốc.
 // Chỉ gỡ khi bên trong không còn dấu " lẻ nào, để không đụng vào JSON / key-value bình thường
@@ -694,6 +833,11 @@ export function detectFormat(text) {
     return looksLikeJavaToString(t) ? 'java' : 'loose'; // để hiện lỗi cú pháp đúng loại
   }
   // Dòng log: chữ đứng trước rồi mới tới JSON / object -> tiền tố làm key
+  if (t[0] === '<') {
+    try { parseXml(t); return 'xml'; } catch { /* có thể là log bắt đầu bằng <…> */ }
+    // Mở và kết thúc bằng thẻ: XML viết sai -> để hiện lỗi cú pháp XML
+    if (/^<(\?xml|[\p{L}_])/u.test(t) && t.endsWith('>')) return 'xml';
+  }
   if (looksLikeLog(t)) return 'log';
   // Java toString có tên lớp đứng trước (Order(id=1), Order{…})
   if (looksLikeJavaToString(t)) return 'java';
@@ -727,6 +871,7 @@ export function convertToJson(text, { format = 'auto', typed = true } = {}) {
       value = records[0];
       break;
     }
+    case 'xml': value = parseXml(text, opts); break;
     case 'kv': value = parseKeyValue(text, opts); break;
     case 'table': value = parseTable(text, opts); break;
     case 'fields': value = parseFieldTable(text); break;
